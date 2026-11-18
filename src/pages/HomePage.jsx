@@ -1,373 +1,404 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { MapPin, Calendar, Car, ChevronRight, Star, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowRight, ArrowUpRight, MapPin } from 'lucide-react';
 import api from '../api/axios';
 import CarCard from '../components/cars/CarCard';
-import PageWrapper from '../components/layout/PageWrapper';
-import Spinner from '../components/ui/Spinner';
-import DiscountBanner from '../components/discounts/DiscountBanner';
+import StarRating from '../components/ui/StarRating';
+import { HUBS } from '../theme/hubs';
+import { PAINTS, PAINT_ORDER, carTitle, paintFor, paintStyle, plural, pluralLower, rupees } from '../theme/paints';
+import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
 
 
-const LOCATIONS = ['SG Highway', 'Vastrapur', 'Bopal', 'Ashram Road', 'Ahmedabad Airport', 'BRTS Bus Stand'];
-const CAR_TYPES = ['All', 'Hypercar', 'Supercar', 'Sports', 'Luxury', 'SUV', 'Sedan', 'Electric', 'Hatchback'];
-
-const TESTIMONIALS = [
-  { name: 'Priya Sharma', location: 'Vastrapur', rating: 5, text: 'Absolutely amazing service! Booked a BMW 3 Series for my anniversary and it was spotless. The process was so smooth. Driveaway is hands down the best in Ahmedabad!' },
-  { name: 'Rahul Patel', location: 'SG Highway', rating: 5, text: 'Rented the Nissan GT-R for a weekend. Pure adrenaline! Great condition, professional staff, and competitive pricing. Will definitely be back.' },
-  { name: 'Anjali Mehta', location: 'Bopal', rating: 4, text: 'The Hyundai Creta was perfect for our family trip to Gir. Clean, fuel-efficient, and pickup from Bopal was super convenient. Highly recommended!' },
-];
-
-const HOW_IT_WORKS = [
-  { icon: Car, title: 'Choose Your Car', desc: 'Browse our premium fleet of 50+ vehicles. Filter by type, budget, and availability.' },
-  { icon: Calendar, title: 'Book & Confirm', desc: 'Select your dates, pickup location, and confirm your booking in under 2 minutes.' },
-  { icon: MapPin, title: 'Drive Away', desc: 'Pick up your car from any of our 8 Ahmedabad locations and hit the road!' },
-];
+const today = () => new Date().toISOString().split('T')[0];
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const [featuredCars, setFeaturedCars] = useState([]);
-  const [loadingCars, setLoadingCars] = useState(true);
-  const [searchForm, setSearchForm] = useState({
-    location: '',
-    from: '',
-    to: '',
-    type: 'All',
-  });
+  const [cars, setCars] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [paintType, setPaintType] = useState('Supercar'); // paint currently on the hero ground
+  const [selected, setSelected] = useState('Supercar');   // paint the visitor picked (content follows instantly)
+  const [wipe, setWipe] = useState(null);                  // { type, x, key } while the new paint sweeps in
+  const [slip, setSlip] = useState({ location: '', from: '', to: '' });
+  const [reviews, setReviews] = useState([]);
+  const fanRef = useRef(null);
 
   useEffect(() => {
-    const fetchFeatured = async () => {
-      try {
-        const { data } = await api.get('/cars?limit=6&status=Available');
-        setFeaturedCars(data.cars || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingCars(false);
-      }
-    };
-    fetchFeatured();
+    let cancelled = false;
+    api.get('/cars', { params: { limit: 100, sort: 'rating' } })
+      .then(({ data }) => { if (!cancelled) setCars(data.cars || []); })
+      .catch(() => {})
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
   }, []);
 
-  const handleSearch = (e) => {
+  // Group the real fleet by category, in paint-book order
+  const book = useMemo(() => {
+    const groups = PAINT_ORDER.map((type) => {
+      // Cars ready to drive first, then the ones out on the road
+      const list = cars.filter((c) => c.type === type).sort((a, b) => (a.status === 'Available' ? 0 : 1) - (b.status === 'Available' ? 0 : 1));
+      const ready = list.filter((c) => c.status === 'Available');
+      return {
+        type,
+        list,
+        ready,
+        from: list.length ? Math.min(...list.map((c) => c.dailyRate)) : 0,
+        hero: ready[0] || list[0],
+      };
+    }).filter((g) => g.list.length);
+    return groups;
+  }, [cars]);
+
+  const group = book.find((g) => g.type === selected);
+  const paint = paintFor(selected);
+  // Longest headline line in characters drives the font size ("IN FRENCH RACING BLUE." is the widest)
+  const headlineChars = Math.max(plural(selected).length + 1, paint.name.length + 4);
+
+  const choose = (type, e) => {
+    if (type === selected) return;
+    const rect = e?.currentTarget?.getBoundingClientRect();
+    const x = rect ? `${Math.round(((rect.left + rect.width / 2) / window.innerWidth) * 100)}%` : '50%';
+    setSelected(type);
+    setWipe({ type, x, key: Date.now() });
+  };
+
+  const findCars = (e) => {
     e.preventDefault();
     const params = new URLSearchParams();
-    if (searchForm.location) params.set('location', searchForm.location);
-    if (searchForm.from) params.set('from', searchForm.from);
-    if (searchForm.to) params.set('to', searchForm.to);
-    if (searchForm.type && searchForm.type !== 'All') params.set('type', searchForm.type);
+    params.set('type', selected);
+    if (slip.location) params.set('location', slip.location);
+    if (slip.from) params.set('from', slip.from);
+    if (slip.to) params.set('to', slip.to);
     navigate(`/fleet?${params.toString()}`);
   };
 
-  const inputClass = "w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none";
+  const heroImg = group?.hero?.images?.main;
+
+  useEffect(() => {
+    const row = fanRef.current;
+    const chip = row?.querySelector('[aria-checked="true"]');
+    if (!row || !chip || row.scrollWidth <= row.clientWidth) return;
+    const target = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+    row.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }, [selected, book.length]);
+  const heroId = group?.hero?._id;
+
+  // Real reviews of the car currently on show (no invented testimonials)
+  useEffect(() => {
+    if (!heroId) return undefined;
+    let cancelled = false;
+    api.get(`/reviews/car/${heroId}`)
+      .then(({ data }) => { if (!cancelled) setReviews((data || []).filter((r) => r.reviewText)); })
+      .catch(() => { if (!cancelled) setReviews([]); });
+    return () => { cancelled = true; };
+  }, [heroId]);
 
   return (
-    <PageWrapper>
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] text-gray-900 dark:text-white transition-colors duration-200">
-
-        {/* ─── HERO ─── */}
-        <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden pt-16">
+    <div>
+      {/* ─────────────── FIRST VIEWPORT: the paint you pick ─────────────── */}
+      <section
+        aria-label={`${plural(selected)} in ${paint.name}`}
+        style={paintStyle(selected)}
+        className="on-paint relative mt-[72px] overflow-hidden text-on-paint"
+      >
+        {/* Ground: the current paint, and the next paint sweeping in from the chosen chip */}
+        <div className="lacquer absolute inset-0" style={paintStyle(paintType)} aria-hidden="true" />
+        {wipe && (
           <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url('/images/luxury_hypercars_header.jpg')" }}
+            key={wipe.key}
+            className="lacquer absolute inset-0 animate-wipe"
+            style={{ ...paintStyle(wipe.type), '--wipe-x': wipe.x }}
+            onAnimationEnd={() => { setPaintType(wipe.type); setWipe(null); }}
+            aria-hidden="true"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/55 to-gray-50 dark:to-[#0D0D0D]" />
+        )}
 
-          <div className="relative z-10 text-center px-4 max-w-4xl mx-auto py-16">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-500/30 backdrop-blur-md rounded-full px-4 py-1.5 mb-6">
-                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span className="text-amber-300 text-sm font-semibold">Ahmedabad's #1 Premium Car Rental</span>
-              </div>
-            </motion.div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight text-white leading-tight mb-6"
-            >
-              Drive Your{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-500 to-amber-300">
-                Dreams
-              </span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-base sm:text-lg text-gray-200 max-w-xl mx-auto mb-8 leading-relaxed font-normal"
-            >
-              Experience luxury, performance, and freedom across Ahmedabad. 50+ premium verified cars. Book in minutes.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="flex items-center justify-center gap-4 flex-wrap"
-            >
-              <Link
-                to="/fleet"
-                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full px-8 py-3.5 transition-all shadow-lg shadow-amber-500/30"
+        <div className="page-container relative pt-6 pb-36 lg:pt-8">
+          {/* Headline: full width, sized so its longest line always fits */}
+          <div style={{ containerType: 'inline-size' }}>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.h1
+                key={selected}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="display"
+                style={{ fontSize: `min(5rem, calc(100cqw / ${headlineChars * 0.86}))` }}
               >
-                Explore Fleet <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link
-                to="/about"
-                className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold rounded-full px-8 py-3.5 transition-colors backdrop-blur-md"
-              >
-                How It Works
-              </Link>
-            </motion.div>
-
-            {/* Stats strip */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.5 }}
-              className="mt-12 flex items-center justify-center gap-8 text-sm text-gray-300 flex-wrap"
-            >
-              {[
-                { val: '50+', label: 'Cars' },
-                { val: '10K+', label: 'Happy Rides' },
-                { val: '4.9★', label: 'Average Rating' },
-                { val: '24/7', label: 'Local Support' },
-              ].map((s) => (
-                <div key={s.label} className="text-center">
-                  <div className="text-white font-bold text-xl">{s.val}</div>
-                  <div className="text-xs text-gray-300">{s.label}</div>
-                </div>
-              ))}
-            </motion.div>
+                {plural(selected)},<br />in {paint.name}.
+              </motion.h1>
+            </AnimatePresence>
           </div>
-        </section>
 
-        {/* ─── QUICK SEARCH WIDGET ─── */}
-        <section className="relative z-20 -mt-10 px-4">
-          <div className="max-w-5xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 sm:p-7 shadow-2xl"
+          <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-12 lg:gap-10">
+          <div className="lg:col-span-5 flex flex-col">
+            <p className="max-w-md text-lg leading-snug">
+              Hypercars, supercars and luxury cars for hire in Ahmedabad. Pick a paint, pick your dates, collect the keys.
+            </p>
+            <p className="mt-4 code-label text-[13px]">
+              Paint {paint.no}
+              {group ? ` · ${group.list.length} ${group.list.length === 1 ? 'car' : 'cars'} · from ${rupees(group.from)} a day` : ''}
+              {' · '}{HUBS.length} pickup hubs
+            </p>
+
+            {/* Order slip: the working booking search */}
+            <form
+              onSubmit={findCars}
+              className="mt-5 rounded-chip bg-raised p-4 text-ink shadow-lift sm:p-5"
+              aria-label="Find a car"
             >
-              <h2 className="text-gray-900 dark:text-white font-bold text-lg mb-4 flex items-center gap-2">
-                <Car className="w-5 h-5 text-amber-500" /> Find Your Perfect Car
-              </h2>
-              <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-700 dark:text-gray-400 font-semibold uppercase tracking-wider">Pickup Location</label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="col-span-2 sm:col-span-1">
+                  <span className="field-label">Pickup hub</span>
                   <select
-                    value={searchForm.location}
-                    onChange={e => setSearchForm(p => ({ ...p, location: e.target.value }))}
-                    className={inputClass}
+                    value={slip.location}
+                    onChange={(e) => setSlip((s) => ({ ...s, location: e.target.value }))}
+                    className="field"
                   >
-                    <option value="" className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">Any Location</option>
-                    {LOCATIONS.map(l => <option key={l} value={l} className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">{l}</option>)}
+                    <option value="">Any hub</option>
+                    {HUBS.map((h) => <option key={h} value={h}>{h}</option>)}
                   </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-700 dark:text-gray-400 font-semibold uppercase tracking-wider">Pickup Date</label>
+                </label>
+                <label className="col-span-2 sm:col-span-1">
+                  <span className="field-label">Category</span>
+                  <select value={selected} onChange={(e) => choose(e.target.value)} className="field">
+                    {(book.length ? book.map((g) => g.type) : PAINT_ORDER.slice(0, 5)).map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="field-label">From</span>
                   <input
                     type="date"
-                    value={searchForm.from}
-                    min={new Date().toISOString().split('T')[0]}
-                    onChange={e => setSearchForm(p => ({ ...p, from: e.target.value }))}
-                    className={inputClass}
+                    min={today()}
+                    value={slip.from}
+                    onChange={(e) => setSlip((s) => ({ ...s, from: e.target.value, to: s.to && s.to <= e.target.value ? '' : s.to }))}
+                    className="field"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-700 dark:text-gray-400 font-semibold uppercase tracking-wider">Return Date</label>
+                </label>
+                <label>
+                  <span className="field-label">To</span>
                   <input
                     type="date"
-                    value={searchForm.to}
-                    min={searchForm.from || new Date().toISOString().split('T')[0]}
-                    onChange={e => setSearchForm(p => ({ ...p, to: e.target.value }))}
-                    className={inputClass}
+                    min={slip.from || today()}
+                    value={slip.to}
+                    onChange={(e) => setSlip((s) => ({ ...s, to: e.target.value }))}
+                    className="field"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-700 dark:text-gray-400 font-semibold uppercase tracking-wider">Car Type</label>
-                  <div className="flex gap-2">
-                    <select
-                      value={searchForm.type}
-                      onChange={e => setSearchForm(p => ({ ...p, type: e.target.value }))}
-                      className={`${inputClass} flex-1`}
-                    >
-                      {CAR_TYPES.map(t => <option key={t} value={t} className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">{t}</option>)}
-                    </select>
-                    <button type="submit" className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl px-4 transition-colors flex items-center justify-center">
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* ─── FEATURED FLEET ─── */}
-        <section className="py-20 px-4">
-          <div className="max-w-7xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="flex items-end justify-between mb-10"
-            >
-              <div>
-                <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-                  <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Premium Selection</span>
-                </div>
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">Featured Fleet</h2>
+                </label>
               </div>
-              <Link to="/fleet" className="flex items-center gap-1 text-amber-500 hover:text-amber-400 text-sm font-bold transition-colors">
-                View All Cars <ArrowRight className="w-4 h-4" />
-              </Link>
-            </motion.div>
-
-            {loadingCars ? (
-              <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {featuredCars.map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
-              </div>
-            )}
+              <button type="submit" className="btn-ink mt-4 w-full !py-4 text-base">
+                Find {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
           </div>
-        </section>
 
-        {/* ─── HOW IT WORKS ─── */}
-        <section className="py-20 px-4 bg-gray-100 dark:bg-[#111] transition-colors">
-          <div className="max-w-5xl mx-auto text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="mb-14"
-            >
-              <div className="flex items-center justify-center gap-2.5 mb-2">
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-                <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Simple Process</span>
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">How It Works</h2>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {HOW_IT_WORKS.map((step, i) => (
-                <motion.div
-                  key={step.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/[0.06] rounded-2xl p-7 text-center shadow-sm hover:shadow-md transition-all"
-                >
-                  <div className="w-14 h-14 bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                    <step.icon className="w-7 h-7 text-amber-500" />
-                  </div>
-                  <div className="text-amber-500 text-xs font-black uppercase tracking-wider mb-2">Step 0{i + 1}</div>
-                  <h3 className="text-gray-900 dark:text-white font-bold text-lg mb-2">{step.title}</h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{step.desc}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ─── TESTIMONIALS ─── */}
-        <section className="py-20 px-4">
-          <div className="max-w-5xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="text-center mb-14"
-            >
-              <div className="flex items-center justify-center gap-2.5 mb-2">
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-                <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">What Drivers Say</span>
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">Customer Reviews</h2>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {TESTIMONIALS.map((t, i) => (
-                <motion.div
-                  key={t.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/[0.06] rounded-2xl p-6 shadow-sm flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-1 mb-3">
-                      {[...Array(t.rating)].map((_, j) => (
-                        <Star key={j} className="w-4 h-4 text-amber-400 fill-amber-400" />
-                      ))}
-                    </div>
-                    <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mb-6 font-normal">"{t.text}"</p>
-                  </div>
-
-                  <div className="flex items-center gap-3 pt-3 border-t border-gray-100 dark:border-white/5">
-                    <div className="w-9 h-9 bg-amber-500/20 rounded-full flex items-center justify-center text-amber-500 font-bold text-sm">
-                      {t.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-gray-900 dark:text-white text-sm font-bold">{t.name}</div>
-                      <div className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-amber-500" /> {t.location}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ─── DISCOUNT NOTIFICATIONS BANNER ─── */}
-        <section className="py-12 px-4 max-w-5xl mx-auto">
-          <DiscountBanner />
-        </section>
-
-        {/* ─── CTA BANNER ─── */}
-        <section className="py-16 px-4">
-          <div className="max-w-4xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              className="relative bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-600/5 dark:from-amber-500/10 dark:to-amber-600/5 border border-amber-500/30 rounded-3xl p-10 sm:p-14 text-center overflow-hidden shadow-lg"
-            >
-              <div className="relative z-10">
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white mb-3">
-                  Ready for Your Next Trip in Ahmedabad?
-                </h2>
-                <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-lg mx-auto text-base">
-                  Choose from 50+ premium vehicles. Free cancellation, no hidden fees, instant doorstep delivery.
-                </p>
+          {/* The car, in a lacquer chip frame */}
+          <div className="order-first lg:order-none lg:col-span-7">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] rounded-bl-[96px] bg-black/20 shadow-lift lg:aspect-auto lg:h-full lg:min-h-[340px]">
+              <AnimatePresence initial={false}>
+                <motion.img
+                  key={heroImg || 'hero'}
+                  initial={{ opacity: 0, scale: 1.04 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                  src={heroImg ? sizedImage(heroImg, 1400, 75) : '/images/luxury_hypercars_header.webp'}
+                  srcSet={heroImg ? imageSrcSet(heroImg, [800, 1200, 1600]) : undefined}
+                  sizes="(min-width: 1024px) 55vw, 100vw"
+                  alt={group?.hero ? carTitle(group.hero) : 'Driveaway hypercars'}
+                  fetchpriority="high"
+                  onError={(e) => handleImageError(e, 1200)}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              </AnimatePresence>
+              {/* clear-coat highlight */}
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,rgb(255_255_255/0.18),transparent_32%)]" />
+              {group?.hero && (
                 <Link
-                  to="/fleet"
-                  className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full px-9 py-4 transition-all shadow-xl shadow-amber-500/25 text-base"
+                  to={`/cars/${group.hero._id}`}
+                  className="absolute bottom-4 right-4 flex items-center gap-3 rounded-full bg-[#0C0C0D]/85 py-2 pl-4 pr-2 text-white hover:bg-[#0C0C0D] transition-colors"
                 >
-                  Book Your Car Now <ArrowRight className="w-5 h-5" />
+                  <span className="text-sm">
+                    <span className="font-semibold">{group.hero.name}</span>
+                    <span className="opacity-70"> · {rupees(group.hero.dailyRate)}/day</span>
+                  </span>
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-[#0C0C0D]">
+                    <ArrowUpRight className="w-4 h-4" />
+                  </span>
                 </Link>
-              </div>
-            </motion.div>
+              )}
+            </div>
+          </div>
+        </div>
+        </div>
+
+        {/* Swatch fan: the paint book. Choosing a chip repaints the page. */}
+        <div className="absolute inset-x-0 bottom-0">
+          <div className="page-container">
+            <div
+              ref={fanRef}
+              role="radiogroup"
+              aria-label="Choose a category"
+              className="-mx-4 flex items-end overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 pt-8 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {(book.length ? book : PAINT_ORDER.slice(0, 5).map((type) => ({ type, list: [] }))).map((g, i, all) => {
+                const p = PAINTS[g.type];
+                const active = g.type === selected;
+                const activeIndex = all.findIndex((x) => x.type === selected);
+                const tilt = active ? 0 : (i < activeIndex ? -1 : 1) * (2 + Math.min(Math.abs(i - activeIndex), 3));
+                return (
+                  <button
+                    key={g.type}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={(e) => choose(g.type, e)}
+                    style={{
+                      ...paintStyle(g.type),
+                      zIndex: 20 - Math.abs(i - activeIndex),
+                      transform: `translateY(${active ? -14 : 10}px) rotate(${tilt}deg)`,
+                      transformOrigin: 'bottom center',
+                    }}
+                    className={`lacquer relative flex h-32 w-[150px] flex-shrink-0 flex-col justify-between rounded-t-[18px] border border-b-0 border-white/25 pl-5 pr-4 pt-3.5 pb-7 text-left shadow-chip transition-transform duration-500 ease-out sm:w-[172px] ${
+                      i > 0 ? '-ml-2' : ''
+                    }`}
+                  >
+                    <span className="code-label text-[11px]">Paint {p.no}</span>
+                    <span>
+                      <span className="block font-wide font-black uppercase leading-none tracking-tight text-[17px]">{g.type}</span>
+                      <span className="mt-1 block text-xs">
+                        {p.name}{g.list.length ? ` · ${g.list.length}` : ''}
+                      </span>
+                    </span>
+                    {active && <span className="absolute right-3.5 top-3.5 h-2.5 w-2.5 rounded-full bg-on-paint" aria-hidden="true" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────── The cars in this paint ─────────────── */}
+      <section style={paintStyle(selected)} className="page-container py-20 sm:py-24" aria-labelledby="line-heading">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-line pb-6">
+          <div>
+            <h2 id="line-heading" className="display text-4xl sm:text-5xl">
+              {group ? `${group.ready.length} ready to drive` : 'The fleet'}
+            </h2>
+            <p className="mt-3 text-muted">
+              {plural(selected)} in {paint.name}
+              {group && group.list.length > group.ready.length ? `, plus ${group.list.length - group.ready.length} out on the road` : ''}.
+            </p>
+          </div>
+          <Link to={`/fleet?type=${selected}`} className="btn-line">
+            All {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [...Array(3)].map((_, i) => <div key={i} className="skeleton aspect-[4/5] rounded-chip" />)
+            : (group?.list || []).slice(0, 6).map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
+        </div>
+      </section>
+
+      {/* ─────────────── How a booking goes: the axis itself, paint to car to keys ─────────────── */}
+      <section className="border-y border-line bg-surface" aria-labelledby="how-heading">
+        <div className="page-container py-20 sm:py-24">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <h2 id="how-heading" className="display text-4xl sm:text-5xl">Paint, car, keys.</h2>
+            <p className="max-w-sm text-muted">
+              Booking takes about two minutes. Pay online now, or pay in cash when you collect the car.
+            </p>
+          </div>
+          <ol className="mt-10 grid gap-4 md:grid-cols-3">
+            <li style={paintStyle(selected)} className="lacquer on-paint flex min-h-[260px] flex-col justify-between rounded-chip rounded-bl-[56px] p-7 shadow-chip">
+              <span className="font-wide font-black text-5xl" aria-hidden="true">1</span>
+              <span>
+                <span className="block font-wide font-black uppercase tracking-tight text-2xl">Pick a paint</span>
+                <span className="mt-2 block">You picked {paint.name}: {pluralLower(selected)}, from {group ? rupees(group.from) : '—'} a day.</span>
+              </span>
+            </li>
+            <li className="relative flex min-h-[260px] flex-col justify-between overflow-hidden rounded-chip bg-[#0C0C0D] p-7 text-white shadow-chip">
+              {group?.hero && (
+                <img src={sizedImage(group.hero.images?.main, 640)} alt="" loading="lazy" decoding="async" onError={(e) => handleImageError(e, 640)} className="absolute inset-0 h-full w-full object-cover opacity-55" />
+              )}
+              <span className="relative font-wide font-black text-5xl" aria-hidden="true">2</span>
+              <span className="relative">
+                <span className="block font-wide font-black uppercase tracking-tight text-2xl">Choose the car</span>
+                <span className="mt-2 block">{group?.hero ? `Like the ${carTitle(group.hero)}, with specs, reviews and rates side by side.` : 'Compare specs, reviews and daily rates.'}</span>
+              </span>
+            </li>
+            <li className="flex min-h-[260px] flex-col justify-between rounded-chip border border-line bg-raised p-7 shadow-chip">
+              <span className="font-wide font-black text-5xl" aria-hidden="true">3</span>
+              <span>
+                <span className="block font-wide font-black uppercase tracking-tight text-2xl">Collect the keys</span>
+                <span className="mt-2 block text-muted">
+                  At {slip.location || 'any of our eight hubs'}. Show your licence, drive away, and your invoice arrives as a PDF.
+                </span>
+              </span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      {/* ─────────────── Real reviews of the car on show ─────────────── */}
+      {reviews.length > 0 && group?.hero && (
+        <section className="page-container py-20 sm:py-24" aria-labelledby="reviews-heading">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <h2 id="reviews-heading" className="display text-4xl sm:text-5xl">
+              Drivers on the {group.hero.name}
+            </h2>
+            <Link to={`/cars/${group.hero._id}#reviews`} className="btn-line">
+              {group.hero.averageRating} from {group.hero.totalReviews} reviews <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {reviews.slice(0, 3).map((r) => (
+              <figure key={r._id} className="flex flex-col rounded-chip border border-line p-7">
+                <StarRating value={r.rating} size="sm" />
+                <blockquote className="mt-5 flex-1 text-lg leading-snug">{r.reviewText || 'Rated without a written review.'}</blockquote>
+                <figcaption className="mt-6 text-sm">
+                  <span className="font-semibold">{r.user?.name || 'Driveaway driver'}</span>
+                  <span className="text-muted"> · {new Date(r.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+                </figcaption>
+              </figure>
+            ))}
           </div>
         </section>
+      )}
 
-      </div>
-    </PageWrapper>
+      {/* ─────────────── Close: hubs on the paint ─────────────── */}
+      <section style={paintStyle(selected)} className="lacquer on-paint" aria-labelledby="hubs-heading">
+        <div className="page-container grid gap-12 py-20 sm:py-24 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <h2 id="hubs-heading" className="display text-[clamp(2.4rem,5vw,4.5rem)]">
+              Your {paint.name} is waiting.
+            </h2>
+            <p className="mt-5 max-w-sm text-lg">Collect it from any of eight hubs across Ahmedabad.</p>
+            <Link to={`/fleet?type=${selected}`} className="btn mt-8 !bg-on-paint !text-paint !px-8 !py-4 text-base hover:!shadow-lift">
+              Book {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <ul className="grid content-start gap-x-8 sm:grid-cols-2 lg:col-span-7">
+            {HUBS.map((h) => (
+              <li key={h} className="border-b border-on-paint/35">
+                <Link
+                  to={`/fleet?type=${selected}&location=${encodeURIComponent(h)}`}
+                  className="group flex items-center justify-between gap-3 py-4 font-semibold"
+                >
+                  <span className="flex items-center gap-2.5"><MapPin className="h-4 w-4" />{h}</span>
+                  <ArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    </div>
   );
 }

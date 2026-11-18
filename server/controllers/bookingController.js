@@ -1,3 +1,4 @@
+const handleError = require('../utils/handleError');
 const Booking = require('../models/Booking');
 const Car = require('../models/Car');
 const DiscountCode = require('../models/DiscountCode');
@@ -5,6 +6,12 @@ const User = require('../models/User');
 const generateInvoiceNumber = require('../utils/generateInvoiceNumber');
 const { sendBookingConfirmationEmail, sendBookingStatusUpdateEmail } = require('../utils/emailService');
 const { triggerCarAvailabilityAlerts } = require('../utils/carAlertService');
+const { escapeRegex } = require('../middleware/securityMiddleware');
+const mongoose = require('mongoose');
+
+const BOOKING_STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
+const PAYMENT_METHODS = Booking.schema.path('paymentMethod').enumValues;
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 // @desc   Create booking
 // @route  POST /api/bookings
@@ -20,6 +27,23 @@ exports.createBooking = async (req, res) => {
       specialRequirements, bookingNotes,
     } = req.body;
 
+    if (!mongoose.isValidObjectId(carId)) return res.status(400).json({ message: 'Invalid car selected' });
+
+    // Validate dates: real dates, return after pickup, pickup not in the past, max 90 days
+    const pickup = new Date(pickupDate);
+    const ret = new Date(returnDate);
+    if (isNaN(pickup) || isNaN(ret)) return res.status(400).json({ message: 'Please select valid pickup and return dates' });
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+    if (pickup < startOfToday) return res.status(400).json({ message: 'Pickup date cannot be in the past' });
+    if (ret <= pickup) return res.status(400).json({ message: 'Return date must be after the pickup date' });
+    if ((ret - pickup) / DAY_MS > 90) return res.status(400).json({ message: 'Bookings cannot exceed 90 days' });
+    if (paymentMethod !== undefined && !PAYMENT_METHODS.includes(paymentMethod)) {
+      return res.status(400).json({ message: 'Invalid payment method' });
+    }
+    if (discountCode !== undefined && discountCode !== null && typeof discountCode !== 'string') {
+      return res.status(400).json({ message: 'Invalid discount code' });
+    }
+
     const car = await Car.findById(carId);
     if (!car) return res.status(404).json({ message: 'Car not found' });
     if (car.status !== 'Available') return res.status(400).json({ message: 'This car is not available for booking' });
@@ -29,15 +53,13 @@ exports.createBooking = async (req, res) => {
       car: carId,
       status: { $in: ['Pending', 'Confirmed'] },
       $or: [
-        { pickupDate: { $lte: new Date(returnDate) }, returnDate: { $gte: new Date(pickupDate) } },
+        { pickupDate: { $lte: ret }, returnDate: { $gte: pickup } },
       ],
     });
     if (existingBooking) return res.status(400).json({ message: 'This car is already booked for the selected dates' });
 
-    // Calculate cost
-    const pickup = new Date(pickupDate);
-    const ret = new Date(returnDate);
-    const totalDays = Math.max(1, Math.ceil((ret - pickup) / (1000 * 60 * 60 * 24)));
+    // Calculate cost (always server-side — never trust a client-sent price)
+    const totalDays = Math.max(1, Math.ceil((ret - pickup) / DAY_MS));
     let totalAmount = totalDays * car.dailyRate;
     let discountAmount = 0;
     let appliedDiscountCode = '';
@@ -67,17 +89,19 @@ exports.createBooking = async (req, res) => {
 
     totalAmount = Math.max(0, Math.round(totalAmount));
     const invoiceNumber = await generateInvoiceNumber();
+    const isPaid = paymentCompleted !== undefined ? paymentCompleted === true : paymentMethod !== 'Cash';
+    const str = (v, max = 300) => (typeof v === 'string' ? v.slice(0, max) : undefined);
 
     const booking = await Booking.create({
       invoiceNumber,
       user: req.user.id,
       car: carId,
-      customerName: customerName || user.name,
-      customerEmail: customerEmail || user.email,
-      customerPhone: customerPhone || user.phone,
-      pickupDate,
-      returnDate,
-      pickupLocation,
+      customerName: str(customerName, 80) || user.name,
+      customerEmail: str(customerEmail, 254) || user.email,
+      customerPhone: str(customerPhone, 20) || user.phone,
+      pickupDate: pickup,
+      returnDate: ret,
+      pickupLocation: str(pickupLocation, 120),
       dailyRateSnapshot: car.dailyRate,
       totalDays,
       totalAmount,
@@ -85,20 +109,20 @@ exports.createBooking = async (req, res) => {
       discountCode: appliedDiscountCode,
       loyaltyPointsUsed,
       paymentMethod: paymentMethod || 'Razorpay',
-      paymentCompleted: paymentCompleted !== undefined ? paymentCompleted : (paymentMethod !== 'Cash'),
-      paymentCompletedAt: (paymentCompleted || paymentMethod !== 'Cash') ? new Date() : undefined,
-      paymentId: paymentId || (paymentMethod !== 'Cash' ? `pay_RZP_${Date.now()}` : undefined),
-      status: (paymentCompleted || paymentMethod !== 'Cash') ? 'Confirmed' : 'Pending',
-      licenseNumber,
-      dateOfBirth,
-      address,
-      drivingExperience,
-      idProofType,
-      idProofNumber,
-      emergencyContact,
-      emergencyPhone,
-      specialRequirements,
-      bookingNotes,
+      paymentCompleted: isPaid,
+      paymentCompletedAt: isPaid ? new Date() : undefined,
+      paymentId: isPaid ? (str(paymentId, 64) || `pay_RZP_${Date.now()}`) : undefined,
+      status: isPaid ? 'Confirmed' : 'Pending',
+      licenseNumber: str(licenseNumber, 40),
+      dateOfBirth: dateOfBirth && !isNaN(new Date(dateOfBirth)) ? dateOfBirth : undefined,
+      address: str(address),
+      drivingExperience: Number.isFinite(Number(drivingExperience)) ? Number(drivingExperience) : undefined,
+      idProofType: str(idProofType, 40),
+      idProofNumber: str(idProofNumber, 40),
+      emergencyContact: str(emergencyContact, 80),
+      emergencyPhone: str(emergencyPhone, 20),
+      specialRequirements: str(specialRequirements, 1000),
+      bookingNotes: str(bookingNotes, 1000),
     });
 
     // Update car status
@@ -120,7 +144,7 @@ exports.createBooking = async (req, res) => {
 
     res.status(201).json(populatedBooking);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -130,10 +154,11 @@ exports.getMyBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({ user: req.user.id })
       .populate('car', 'name company images type')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(bookings);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -145,12 +170,12 @@ exports.getBookingById = async (req, res) => {
       .populate('car')
       .populate('user', 'name email phone');
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (booking.user?._id?.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized to view this booking' });
     }
     res.json(booking);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -180,7 +205,7 @@ exports.cancelBooking = async (req, res) => {
 
     res.json(booking);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -190,15 +215,23 @@ exports.markPaymentComplete = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    // Only the booking owner (or an admin) may mark it paid
+    if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    if (booking.status === 'Cancelled') return res.status(400).json({ message: 'Cannot pay for a cancelled booking' });
+    if (req.body.paymentMethod !== undefined && !PAYMENT_METHODS.includes(req.body.paymentMethod)) {
+      return res.status(400).json({ message: 'Invalid payment method' });
+    }
     booking.paymentCompleted = true;
     booking.paymentCompletedAt = new Date();
-    if (req.body.paymentId) booking.paymentId = req.body.paymentId;
+    if (typeof req.body.paymentId === 'string') booking.paymentId = req.body.paymentId.slice(0, 64);
     if (req.body.paymentMethod) booking.paymentMethod = req.body.paymentMethod;
     if (booking.status === 'Pending') booking.status = 'Confirmed';
     await booking.save();
     res.json(booking);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -206,27 +239,33 @@ exports.markPaymentComplete = async (req, res) => {
 // @route  GET /api/bookings
 exports.getAllBookings = async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 10 } = req.query;
+    const { status, search } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
     let query = {};
-    if (status) query.status = status;
+    if (status && BOOKING_STATUSES.includes(status)) query.status = status;
     if (search) {
+      const rx = escapeRegex(search);
       query.$or = [
-        { invoiceNumber: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerEmail: { $regex: search, $options: 'i' } },
+        { invoiceNumber: { $regex: rx, $options: 'i' } },
+        { customerName: { $regex: rx, $options: 'i' } },
+        { customerEmail: { $regex: rx, $options: 'i' } },
       ];
     }
-    const skip = (Number(page) - 1) * Number(limit);
-    const bookings = await Booking.find(query)
-      .populate('car', 'name company type')
-      .populate('user', 'name email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-    const total = await Booking.countDocuments(query);
-    res.json({ bookings, totalPages: Math.ceil(total / Number(limit)), currentPage: Number(page), total });
+    const skip = (page - 1) * limit;
+    const [bookings, total] = await Promise.all([
+      Booking.find(query)
+        .populate('car', 'name company type')
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Booking.countDocuments(query),
+    ]);
+    res.json({ bookings, totalPages: Math.ceil(total / limit), currentPage: page, total });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -234,13 +273,16 @@ exports.getAllBookings = async (req, res) => {
 // @route  PATCH /api/bookings/:id/status
 exports.updateBookingStatus = async (req, res) => {
   try {
+    if (!BOOKING_STATUSES.includes(req.body.status)) {
+      return res.status(400).json({ message: `Status must be one of: ${BOOKING_STATUSES.join(', ')}` });
+    }
     const booking = await Booking.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status },
       { new: true }
     ).populate('car', 'name');
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    if (['Completed', 'Cancelled'].includes(req.body.status)) {
+    if (['Completed', 'Cancelled'].includes(req.body.status) && booking.car) {
       await Car.findByIdAndUpdate(booking.car._id, { status: 'Available' });
       triggerCarAvailabilityAlerts(booking.car._id).catch(err => console.error(err));
     }
@@ -250,7 +292,7 @@ exports.updateBookingStatus = async (req, res) => {
 
     res.json(booking);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -263,7 +305,7 @@ exports.deleteBooking = async (req, res) => {
     await Booking.findByIdAndDelete(req.params.id);
     res.json({ message: 'Booking deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -274,17 +316,19 @@ exports.getWhatsAppInvoice = async (req, res) => {
     const booking = await Booking.findById(req.params.id).populate('car').populate('user', 'name phone email');
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
 
-    if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (booking.user?._id?.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
     const { generateWhatsAppInvoiceText, getWhatsAppUrl, sendWhatsAppMessageViaTwilio } = require('../utils/whatsappService');
     const text = generateWhatsAppInvoiceText(booking, booking.car);
-    const targetPhone = req.query.phone || booking.customerPhone || booking.user?.phone;
+    const isAdmin = req.user.role === 'admin';
+    // Only admins may send to an arbitrary number or trigger a server-side send
+    const targetPhone = (isAdmin && req.query.phone) || booking.customerPhone || booking.user?.phone;
     const url = getWhatsAppUrl(targetPhone, text);
 
     let apiSendResult = null;
-    if (req.query.send === 'true') {
+    if (req.query.send === 'true' && isAdmin) {
       apiSendResult = await sendWhatsAppMessageViaTwilio({ to: targetPhone, text });
     }
 
@@ -296,6 +340,6 @@ exports.getWhatsAppInvoice = async (req, res) => {
       apiSendResult,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };

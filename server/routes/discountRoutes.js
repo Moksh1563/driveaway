@@ -1,3 +1,4 @@
+const handleError = require('../utils/handleError');
 /**
  * ============================================================================
  * DISCOUNT & PROMOTION ROUTES
@@ -17,6 +18,7 @@ const User = require('../models/User');
 const { protect, optionalProtect } = require('../middleware/authMiddleware');
 const { admin } = require('../middleware/adminMiddleware');
 const { sendDiscountBroadcastEmail } = require('../utils/emailService');
+const { isValidEmail } = require('../middleware/securityMiddleware');
 
 // ----------------------------------------------------------------------------
 // @desc   Validate a discount promo code during checkout
@@ -26,7 +28,7 @@ const { sendDiscountBroadcastEmail } = require('../utils/emailService');
 router.post('/validate', protect, async (req, res) => {
   try {
     const { code } = req.body;
-    if (!code) return res.status(400).json({ message: 'Please provide a discount code' });
+    if (!code || typeof code !== 'string') return res.status(400).json({ message: 'Please provide a discount code' });
 
     // Find active discount matching uppercase code
     const discount = await DiscountCode.findOne({ code: code.toUpperCase(), isActive: true });
@@ -38,7 +40,7 @@ router.post('/validate', protect, async (req, res) => {
       code: discount.code,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -50,7 +52,7 @@ router.post('/validate', protect, async (req, res) => {
 router.post('/subscribe', optionalProtect, async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email || !email.includes('@')) {
+    if (!isValidEmail(email)) {
       return res.status(400).json({ message: 'A valid email address is required.' });
     }
 
@@ -77,10 +79,9 @@ router.post('/subscribe', optionalProtect, async (req, res) => {
 
     res.status(201).json({
       message: `🎉 You're subscribed! We will notify ${normalizedEmail} whenever exciting new discounts are launched.`,
-      subscriber,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -97,7 +98,7 @@ router.get('/', protect, admin, async (req, res) => {
 
     res.json({ discounts, subscriberCount, userCount });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -110,8 +111,18 @@ router.post('/', protect, admin, async (req, res) => {
   try {
     const { code, percentageOff, maxDiscount, isActive = true, notifyUsers = false, customMessage } = req.body;
 
-    if (!code || !percentageOff) {
+    if (!code || typeof code !== 'string' || !percentageOff) {
       return res.status(400).json({ message: 'Code and percentage discount are required' });
+    }
+    if (!/^[A-Za-z0-9_-]{3,20}$/.test(code.trim())) {
+      return res.status(400).json({ message: 'Code must be 3-20 letters, numbers, - or _' });
+    }
+    const pct = Number(percentageOff);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 90) {
+      return res.status(400).json({ message: 'Percentage off must be between 1 and 90' });
+    }
+    if (maxDiscount !== undefined && maxDiscount !== '' && maxDiscount !== null && (!Number.isFinite(Number(maxDiscount)) || Number(maxDiscount) < 0)) {
+      return res.status(400).json({ message: 'Max discount must be a positive number' });
     }
 
     const upperCode = code.toUpperCase().trim();
@@ -139,7 +150,7 @@ router.post('/', protect, admin, async (req, res) => {
       broadcastCount,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -158,7 +169,7 @@ router.patch('/:id/toggle', protect, admin, async (req, res) => {
 
     res.json({ message: `Discount code ${discount.code} is now ${discount.isActive ? 'Active' : 'Inactive'}`, discount });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -174,7 +185,7 @@ router.delete('/:id', protect, admin, async (req, res) => {
 
     res.json({ message: `Discount code ${discount.code} deleted successfully` });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -196,7 +207,7 @@ router.post('/broadcast/:id', protect, admin, async (req, res) => {
       discount,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 });
 
@@ -206,8 +217,10 @@ router.post('/broadcast/:id', protect, admin, async (req, res) => {
  */
 async function broadcastDiscountHelper(discount, customMessage) {
   try {
-    const registeredUsers = await User.find({ email: { $exists: true, $ne: '' } }, 'name email');
-    const subscribers = await DiscountSubscriber.find({ isActive: true, email: { $exists: true, $ne: '' } });
+    const [registeredUsers, subscribers] = await Promise.all([
+      User.find({ email: { $exists: true, $ne: '' } }, 'name email').lean(),
+      DiscountSubscriber.find({ isActive: true, email: { $exists: true, $ne: '' } }, 'email').lean(),
+    ]);
 
     // Use a Map keyed by lowercase email to deduplicate
     const recipientMap = new Map();

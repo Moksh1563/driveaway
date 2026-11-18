@@ -30,3 +30,10 @@ dist-ssr
 
 # MongoDB Local Data
 .mongodb_data
+
+.playwright-mcp
+
+# Impeccable runtime output (keep PRODUCT.md, DESIGN.md, .impeccable/surfaces, design.json)
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/questions/

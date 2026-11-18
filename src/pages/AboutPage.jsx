@@ -1,151 +1,111 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { MapPin, Shield, Star, Car, Zap, Clock } from 'lucide-react';
-import PageWrapper from '../components/layout/PageWrapper';
+import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
+import { sizedImage } from '../utils/image';
+import { PAINTS, PAINT_ORDER, paintStyle } from '../theme/paints';
+import { HUBS } from '../theme/hubs';
 
-const WHY_US = [
-  { icon: Shield, title: 'Fully Insured', desc: 'Comprehensive insurance coverage on all our vehicles for complete peace of mind.' },
-  { icon: Star, title: '4.9★ Rated', desc: 'Over 10,000 happy customers across Ahmedabad consistently rate us 5 stars.' },
-  { icon: MapPin, title: '8 Locations', desc: 'Pickup and drop-off from SG Highway, Airport, Vastrapur, Bopal and more.' },
-  { icon: Clock, title: '24/7 Support', desc: 'Our support team is available round the clock for any assistance.' },
-  { icon: Zap, title: 'Instant Booking', desc: 'Book in under 2 minutes. No hidden charges. Cancel anytime.' },
-  { icon: Car, title: '50+ Cars', desc: 'From budget hatchbacks to premium sports cars — we have something for everyone.' },
+const PROMISES = [
+  { title: 'Fully insured', desc: 'Every car carries comprehensive insurance for the length of your rental.' },
+  { title: 'Eight hubs', desc: 'Collect and return at SG Highway, the airport, Vastrapur, Bopal and four more.' },
+  { title: 'Support all day', desc: 'Our Ahmedabad team answers calls daily from 7:00 AM to 10:00 PM.' },
+  { title: 'Book in minutes', desc: 'Pick the car, the dates and a hub. No hidden charges and free cancellation.' },
 ];
 
 const TEAM = [
-  { name: 'Arjun Mehta', role: 'Founder & CEO', img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400', bio: 'Ahmedabad native with 10+ years in the automotive industry.' },
-  { name: 'Priya Desai', role: 'Head of Operations', img: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400', bio: 'Ensures every customer gets a 5-star experience.' },
-  { name: 'Ravi Shah', role: 'Fleet Manager', img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400', bio: 'Keeps every car in pristine condition for your journey.' },
+  { name: 'Arjun Mehta', role: 'Founder & CEO', img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400', bio: 'Ahmedabad native with over ten years in the automotive industry.' },
+  { name: 'Priya Desai', role: 'Head of Operations', img: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400', bio: 'Makes sure every handover is on time and every car is ready.' },
+  { name: 'Ravi Shah', role: 'Fleet Manager', img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400', bio: 'Keeps every car in the fleet in showroom condition.' },
 ];
 
 export default function AboutPage() {
   return (
-    <PageWrapper>
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] text-gray-900 dark:text-white pt-20 transition-colors">
+    <div className="pt-[72px]">
+      {/* Story */}
+      <section className="page-container grid gap-12 py-20 lg:grid-cols-12 lg:py-28">
+        <h1 className="display text-[clamp(2.8rem,6.5vw,6rem)] lg:col-span-7">
+          A paint book of fast cars.
+        </h1>
+        <div className="space-y-5 text-lg leading-relaxed text-muted lg:col-span-5 lg:pt-4">
+          <p>
+            Driveaway started in Ahmedabad with a small fleet and one idea: renting an exceptional car should feel as easy as
+            booking a cab.
+          </p>
+          <p>
+            Today the fleet runs from track-bred hypercars to quiet luxury saloons. Each category has its own factory paint, so you
+            can find the kind of drive you want at a glance, then collect it from a hub near you.
+          </p>
+          <Link to="/fleet" className="btn-ink !mt-8">See the fleet <ArrowRight className="h-4 w-4" /></Link>
+        </div>
+      </section>
 
-        {/* Hero */}
-        <section className="relative py-20 px-4 overflow-hidden">
-          <div className="max-w-4xl mx-auto text-center relative z-10">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              <div className="flex items-center justify-center gap-2.5 mb-4">
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-                <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Our Story</span>
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              </div>
-              <h1 className="text-4xl sm:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-6">
-                Ahmedabad's Premier<br /><span className="text-amber-500">Car Rental Experience</span>
-              </h1>
-              <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
-                Founded in Ahmedabad, Driveaway has grown from a local fleet of 5 cars to the city's most trusted car rental brand.
-                We believe everyone deserves to drive in comfort and style — whether it's a corporate commute to SG Highway or
-                a weekend road trip to Udaipur.
-              </p>
-            </motion.div>
-          </div>
-        </section>
+      {/* The paint book, full width */}
+      <section aria-label="Our categories" className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+        {PAINT_ORDER.map((t) => (
+          <Link
+            key={t}
+            to={`/fleet?type=${t}`}
+            style={paintStyle(t)}
+            className="lacquer on-paint group flex aspect-[3/4] flex-col justify-between p-5 transition-[filter] hover:brightness-110"
+          >
+            <span className="code-label text-[11px]">Paint {PAINTS[t].no}</span>
+            <span>
+              <span className="block font-wide font-black uppercase tracking-tight text-lg leading-none">{t}</span>
+              <span className="mt-1 block text-xs">{PAINTS[t].name}</span>
+            </span>
+          </Link>
+        ))}
+      </section>
 
-        {/* Stats */}
-        <section className="py-12 px-4 bg-white dark:bg-[#111] border-y border-gray-200 dark:border-white/[0.06]">
-          <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
-            {[
-              { val: '50+', label: 'Verified Cars' },
-              { val: '10K+', label: 'Completed Trips' },
-              { val: '8', label: 'Ahmedabad Hubs' },
-              { val: '4.9★', label: 'Average Rating' },
-            ].map((s, i) => (
-              <motion.div key={s.label} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}>
-                <div className="text-3xl sm:text-4xl font-black text-amber-500 mb-1">{s.val}</div>
-                <div className="text-gray-600 dark:text-gray-400 text-xs font-bold uppercase tracking-wider">{s.label}</div>
-              </motion.div>
+      {/* Promises */}
+      <section className="page-container py-20 lg:py-24">
+        <h2 className="display text-4xl sm:text-5xl">What you can count on.</h2>
+        <dl className="mt-12 grid gap-px overflow-hidden rounded-chip border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+          {PROMISES.map((p) => (
+            <div key={p.title} className="bg-ground p-7">
+              <dt className="font-wide font-black uppercase tracking-tight text-lg">{p.title}</dt>
+              <dd className="mt-3 text-sm leading-relaxed text-muted">{p.desc}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/* Team */}
+      <section className="border-y border-line bg-surface">
+        <div className="page-container py-20 lg:py-24">
+          <h2 className="display text-4xl sm:text-5xl">The people with the keys.</h2>
+          <div className="mt-12 grid gap-8 sm:grid-cols-3">
+            {TEAM.map((m) => (
+              <figure key={m.name}>
+                <div className="aspect-[4/5] overflow-hidden rounded-chip rounded-bl-[64px] bg-ink/5">
+                  <img src={sizedImage(m.img, 600)} alt={m.name} loading="lazy" decoding="async" className="h-full w-full object-cover object-top grayscale transition duration-500 hover:grayscale-0" />
+                </div>
+                <figcaption className="mt-5">
+                  <p className="font-wide font-black uppercase tracking-tight text-lg">{m.name}</p>
+                  <p className="code-label mt-1 text-[12px] text-muted">{m.role}</p>
+                  <p className="mt-3 text-sm text-muted">{m.bio}</p>
+                </figcaption>
+              </figure>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Why Choose Us */}
-        <section className="py-20 px-4">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-14">
-              <div className="flex items-center justify-center gap-2.5 mb-2">
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-                <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Why Driveaway</span>
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white">Why Ahmedabad Chooses Us</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {WHY_US.map((item, i) => (
-                <motion.div
-                  key={item.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08 }}
-                  className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-7 shadow-sm"
-                >
-                  <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center mb-4">
-                    <item.icon className="w-6 h-6 text-amber-500" />
-                  </div>
-                  <h3 className="text-gray-900 dark:text-white font-bold text-lg mb-2">{item.title}</h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{item.desc}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Team */}
-        <section className="py-20 px-4 bg-gray-100 dark:bg-[#111]">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-14">
-              <div className="flex items-center justify-center gap-2.5 mb-2">
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-                <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Leadership</span>
-                <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white">Meet Our Team</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {TEAM.map((member, i) => (
-                <motion.div
-                  key={member.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden text-center shadow-sm"
-                >
-                  <img src={member.img} alt={member.name} className="w-full h-44 object-cover object-top" />
-                  <div className="p-6">
-                    <h3 className="text-gray-900 dark:text-white font-bold text-base">{member.name}</h3>
-                    <p className="text-amber-600 dark:text-amber-400 text-xs font-bold mb-2">{member.role}</p>
-                    <p className="text-gray-600 dark:text-gray-400 text-xs leading-relaxed">{member.bio}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Locations */}
-        <section className="py-20 px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="flex items-center justify-center gap-2.5 mb-2">
-              <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Pickup Spots</span>
-              <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white mb-8">Serving Across Ahmedabad</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-              {['SG Highway', 'Vastrapur', 'Bopal', 'Ashram Road', 'Airport', 'BRTS Stand', 'Navrangpura', 'Satellite'].map(loc => (
-                <div key={loc} className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-4 flex items-center gap-2.5 shadow-xs">
-                  <MapPin className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                  <span className="text-gray-800 dark:text-gray-200 text-sm font-semibold">{loc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-    </PageWrapper>
+      {/* Hubs */}
+      <section className="page-container py-20 lg:py-24">
+        <div className="grid gap-10 lg:grid-cols-12">
+          <h2 className="display text-4xl sm:text-5xl lg:col-span-5">Serving all of Ahmedabad.</h2>
+          <ul className="flex flex-wrap content-start gap-2 lg:col-span-7">
+            {HUBS.map((h) => (
+              <li key={h}>
+                <Link to={`/fleet?location=${encodeURIComponent(h)}`} className="inline-block rounded-full border border-line px-4 py-2.5 text-sm font-semibold hover:border-ink">
+                  {h}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    </div>
   );
 }

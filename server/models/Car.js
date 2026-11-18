@@ -21,8 +21,22 @@ const carSchema = new mongoose.Schema({
     img3: { type: String, default: '' },
     img4: { type: String, default: '' },
   },
+  // Photo credits (author + licence) for images from Wikimedia Commons, shown on the car page
+  imageCredits: [{
+    _id: false,
+    url:     { type: String },
+    author:  { type: String },
+    license: { type: String },
+    source:  { type: String },
+  }],
   averageRating:  { type: Number, default: 0 },
   totalReviews:   { type: Number, default: 0 },
 }, { timestamps: true });
+
+// Indexes for the fleet filters and sorts used by GET /api/cars
+carSchema.index({ status: 1, createdAt: -1 });
+carSchema.index({ type: 1, dailyRate: 1 });
+carSchema.index({ dailyRate: 1 });
+carSchema.index({ averageRating: -1 });
 
 module.exports = mongoose.model('Car', carSchema);

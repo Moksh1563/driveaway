@@ -9,5 +9,6 @@ const reviewSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 reviewSchema.index({ user: 1, booking: 1 }, { unique: true });
+reviewSchema.index({ car: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Review', reviewSchema);

@@ -2,11 +2,28 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚗</text></svg>" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Driveaway rents hypercars, supercars and luxury cars in Ahmedabad. Pick a car, choose your pickup hub and dates, and book online in minutes." />
+    <meta name="theme-color" content="#0C0C0D" />
     <title>Driveaway — Premium Car Rentals Ahmedabad</title>
+
+    <!-- Apply saved theme before first paint (prevents a dark/light flash) -->
+    <script>
+      try {
+        var t = localStorage.getItem('driveaway_theme');
+        if (t === 'light') document.documentElement.classList.remove('dark');
+      } catch (e) {}
+    </script>
+
+    <!-- Fonts: connect early and load without blocking render -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
   </head>
-  <body class="bg-light-bg dark:bg-dark text-gray-900 dark:text-gray-100">
+  <body>
+    <noscript>Driveaway needs JavaScript enabled to run.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

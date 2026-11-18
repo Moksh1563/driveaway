@@ -1,97 +1,82 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Users, Fuel, Settings, Star, ArrowRight } from 'lucide-react';
-import Badge from '../ui/Badge';
+import { ArrowUpRight, Bell, Star } from 'lucide-react';
+import { sizedImage, imageSrcSet, handleImageError } from '../../utils/image';
+import { paintFor, paintStyle, rupees } from '../../theme/paints';
 
 export default function CarCard({ car, index = 0 }) {
-  const {
-    _id, name, company, type, dailyRate, status, fuelType,
-    transmission, seats, averageRating, totalReviews, images,
-  } = car;
+  const { _id, name, company, type, dailyRate, status, fuelType, transmission, seats, averageRating, totalReviews, images } = car;
+  const paint = paintFor(type);
+  const available = status === 'Available';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.05 }}
-      whileHover={{ y: -4 }}
-      className="group bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/[0.06] rounded-2xl overflow-hidden hover:shadow-xl dark:hover:shadow-amber-500/10 transition-all duration-300 shadow-sm"
+    <Link
+      to={`/cars/${_id}`}
+      style={paintStyle(type)}
+      className="group relative flex h-full flex-col overflow-hidden rounded-chip border border-line bg-raised transition-[box-shadow,transform] duration-300 ease-out hover:-translate-y-1 hover:shadow-lift focus-visible:-translate-y-1"
+      aria-label={`${name}, ${type}, ${rupees(dailyRate)} per day${available ? '' : `, currently ${status.toLowerCase()}`}`}
     >
-      {/* Image */}
-      <div className="relative h-48 overflow-hidden bg-gray-100 dark:bg-gray-800">
+      <div className="relative aspect-[16/10] overflow-hidden bg-ink/5">
         <img
-          src={images?.main || 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800'}
-          alt={name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800'; }}
+          src={sizedImage(images?.main, 640)}
+          srcSet={imageSrcSet(images?.main, [400, 640, 960])}
+          sizes="(min-width: 1280px) 30vw, (min-width: 640px) 50vw, 100vw"
+          alt=""
+          width="640"
+          height="400"
+          loading={index < 3 ? 'eager' : 'lazy'}
+          decoding="async"
+          onError={(e) => handleImageError(e, 640)}
+          className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04] ${available ? '' : 'unlit'}`}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        {/* Status Badge */}
-        <div className="absolute top-3 right-3">
-          <Badge status={status} />
-        </div>
-        {/* Type Badge */}
-        <div className="absolute bottom-3 left-3">
-          <Badge status={type} showDot={false} />
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="p-5 space-y-3">
-        {/* Title & Price */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-gray-900 dark:text-white font-bold text-base leading-tight">{name}</h3>
-            <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5 font-medium">{company}</p>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-amber-500 font-black text-lg">₹{dailyRate.toLocaleString('en-IN')}</div>
-            <div className="text-gray-400 text-[11px]">/day</div>
-          </div>
-        </div>
-
-        {/* Rating */}
-        {totalReviews > 0 && (
-          <div className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-            <span className="text-gray-900 dark:text-white text-xs font-semibold">{averageRating}</span>
-            <span className="text-gray-500 dark:text-gray-400 text-xs">({totalReviews} reviews)</span>
-          </div>
+        {/* Paint chip */}
+        <span className="lacquer absolute left-3 top-3 rounded-lg px-2.5 py-1.5 code-label text-[11px] shadow-soft">
+          {paint.no} · {type}
+        </span>
+        {!available && (
+          <span className="absolute right-3 top-3 rounded-full bg-[#0C0C0D]/85 px-3 py-1.5 code-label text-[11px] text-white">
+            {status}
+          </span>
         )}
+      </div>
 
-        {/* Specs */}
-        <div className="flex items-center gap-4 text-gray-600 dark:text-gray-400 text-xs font-medium pt-1 border-t border-gray-100 dark:border-white/5">
-          <div className="flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-amber-500" />
-            <span>{seats} Seats</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Fuel className="w-3.5 h-3.5 text-amber-500" />
-            <span>{fuelType}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Settings className="w-3.5 h-3.5 text-amber-500" />
-            <span>{transmission}</span>
-          </div>
+      <div className="flex flex-1 flex-col p-5">
+        {/* Name gets the full width (long makes like LAMBORGHINI never collide with the price) */}
+        <h3 className="font-wide font-black uppercase leading-[1.05] tracking-tight text-[17px] [overflow-wrap:anywhere]">{name}</h3>
+        <div className="mt-2 flex items-baseline justify-between gap-4">
+          <p className="code-label text-[11px] text-muted">{company}</p>
+          <p className="flex-shrink-0 text-right">
+            <span className="font-wide font-black text-lg leading-none">{rupees(dailyRate)}</span>
+            <span className="ml-1 text-xs text-muted">/day</span>
+          </p>
         </div>
 
-        {/* CTA */}
-        <Link
-          to={`/cars/${_id}`}
-          className={`w-full flex items-center justify-center gap-2 font-bold text-sm rounded-xl py-2.5 transition-all shadow-sm active:scale-[0.98] ${
-            status === 'Available'
-              ? 'bg-amber-500 hover:bg-amber-400 text-black'
-              : 'bg-gray-100 hover:bg-amber-500 hover:text-black dark:bg-white/5 dark:hover:bg-amber-500 dark:hover:text-black text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-white/10'
-          }`}
-        >
-          {status === 'Available' ? (
-            <>View Details <ArrowRight className="w-4 h-4" /></>
-          ) : (
-            <>🔔 Notify When Available <ArrowRight className="w-4 h-4" /></>
+        <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
+          <div><dt className="sr-only">Seats</dt><dd>{seats} seats</dd></div>
+          <div><dt className="sr-only">Fuel</dt><dd>{fuelType}</dd></div>
+          <div><dt className="sr-only">Gearbox</dt><dd>{transmission}</dd></div>
+          {totalReviews > 0 && (
+            <div className="flex items-center gap-1 text-ink">
+              <dt className="sr-only">Rating</dt>
+              <Star className="w-3.5 h-3.5 fill-current" />
+              <dd className="font-semibold">{averageRating}</dd>
+              <span className="text-muted">({totalReviews})</span>
+            </div>
           )}
-        </Link>
+        </dl>
+
+        {/* Footer row fills with the car's paint on hover */}
+        <div className="relative mt-auto pt-5">
+          <div className="relative overflow-hidden rounded-xl border border-line">
+            <span className="lacquer absolute inset-0 origin-left scale-x-0 transition-transform duration-500 ease-out group-hover:scale-x-100 group-focus-visible:scale-x-100" aria-hidden="true" />
+            <span className="relative flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors duration-300 group-hover:text-on-paint group-focus-visible:text-on-paint">
+              {available ? 'View and book' : 'Notify me when free'}
+              {available ? <ArrowUpRight className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+            </span>
+          </div>
+          <p className="sr-only">{paint.name}</p>
+        </div>
       </div>
-    </motion.div>
+    </Link>
   );
 }

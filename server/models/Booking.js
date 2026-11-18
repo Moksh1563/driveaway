@@ -42,4 +42,10 @@ const bookingSchema = new mongoose.Schema({
   bookingNotes:       { type: String },
 }, { timestamps: true });
 
+// Indexes for "my bookings", overlap checks and admin listing
+bookingSchema.index({ user: 1, createdAt: -1 });
+bookingSchema.index({ car: 1, status: 1, pickupDate: 1, returnDate: 1 });
+bookingSchema.index({ status: 1, createdAt: -1 });
+bookingSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model('Booking', bookingSchema);

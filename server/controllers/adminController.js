@@ -1,19 +1,26 @@
+const handleError = require('../utils/handleError');
 const Booking = require('../models/Booking');
 const Car = require('../models/Car');
 const User = require('../models/User');
+const { escapeRegex } = require('../middleware/securityMiddleware');
 
 // @desc   Get admin dashboard stats
 // @route  GET /api/admin/dashboard
 exports.getDashboardStats = async (req, res) => {
   try {
-    const [allBookings, cars, users] = await Promise.all([
-      Booking.find().populate('user', 'name').populate('car', 'name company'),
-      Car.find(),
-      User.find({ role: 'user' }).select('-password'),
+    // Only fetch the fields the dashboard needs (lean = plain objects, much faster)
+    const [allBookings, cars, totalUsers] = await Promise.all([
+      Booking.find()
+        .select('invoiceNumber customerName totalAmount paymentCompleted status createdAt car user pickupDate returnDate')
+        .populate('user', 'name')
+        .populate('car', 'name company')
+        .lean(),
+      Car.find().select('name company type dailyRate status images averageRating totalReviews').lean(),
+      User.countDocuments({ role: 'user' }),
     ]);
 
     const totalRevenue = allBookings
-      .filter(b => b.paymentCompleted)
+      .filter(b => b.paymentCompleted && b.status !== 'Cancelled')
       .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
     // Monthly revenue (last 6 months)
@@ -31,7 +38,7 @@ exports.getDashboardStats = async (req, res) => {
       const rev = allBookings
         .filter(b => {
           const d = new Date(b.createdAt);
-          return b.paymentCompleted && d.getMonth() === m.m && d.getFullYear() === m.y;
+          return b.paymentCompleted && b.status !== 'Cancelled' && d.getMonth() === m.m && d.getFullYear() === m.y;
         })
         .reduce((s, b) => s + (b.totalAmount || 0), 0);
       return { month: m.name, revenue: rev };
@@ -46,7 +53,7 @@ exports.getDashboardStats = async (req, res) => {
       }
     });
     const topCars = cars
-      .map(c => ({ ...c.toObject(), bookingCount: carBookingCount[c._id.toString()] || 0 }))
+      .map(c => ({ ...c, bookingCount: carBookingCount[c._id.toString()] || 0 }))
       .sort((a, b) => b.bookingCount - a.bookingCount)
       .slice(0, 5);
 
@@ -65,13 +72,13 @@ exports.getDashboardStats = async (req, res) => {
       availableCars: cars.filter(c => c.status === 'Available').length,
       rentedCars: cars.filter(c => c.status === 'Rented').length,
       maintenanceCars: cars.filter(c => c.status === 'Maintenance').length,
-      totalUsers: users.length,
+      totalUsers,
       monthlyRevenue,
       recentBookings,
       topCars,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -82,15 +89,17 @@ exports.getAllUsers = async (req, res) => {
     const { search } = req.query;
     let query = { role: 'user' };
     if (search) {
+      const rx = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { name: { $regex: rx, $options: 'i' } },
+        { email: { $regex: rx, $options: 'i' } },
+        { username: { $regex: rx, $options: 'i' } },
       ];
     }
-    const users = await User.find(query).select('-password').sort({ createdAt: -1 });
+    const users = await User.find(query).select('-password').sort({ createdAt: -1 }).limit(500).lean();
     res.json(users);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -105,6 +114,6 @@ exports.deleteUser = async (req, res) => {
     await User.findByIdAndDelete(req.params.id);
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };

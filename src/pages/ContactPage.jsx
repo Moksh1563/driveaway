@@ -1,126 +1,107 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { MapPin, Phone, Mail, Clock, Send } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { MapPin, Phone, Mail, Clock, ArrowRight, Check } from 'lucide-react';
 import api from '../api/axios';
-import PageWrapper from '../components/layout/PageWrapper';
 import Button from '../components/ui/Button';
+import { paintStyle } from '../theme/paints';
 
-const inputClass = 'w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl px-4 py-3 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none placeholder-gray-400 dark:placeholder-gray-500 shadow-xs transition-all';
-const labelClass = 'block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5';
+const DETAILS = [
+  { icon: MapPin, title: 'Headquarters', lines: ['Shop No. 12, SG Highway', 'Bodakdev, Ahmedabad, Gujarat 380054'] },
+  { icon: Phone, title: 'Phone', lines: ['+91 79-2630-0000', '+91 98765 43210'], href: 'tel:+917926300000' },
+  { icon: Mail, title: 'Email', lines: ['info@driveaway.in', 'bookings@driveaway.in'], href: 'mailto:info@driveaway.in' },
+  { icon: Clock, title: 'Hours', lines: ['Every day', '7:00 AM to 10:00 PM IST'] },
+];
+
+const EMPTY = { name: '', email: '', phone: '', subject: '', message: '' };
 
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', subject: '', message: '' });
+  const [form, setForm] = useState(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState(null); // { ok, text }
+
+  const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setStatus(null);
     try {
       await api.post('/contact', form);
-      toast.success('Message sent! We\'ll get back to you soon 📨');
-      setForm({ name: '', email: '', phone: '', subject: '', message: '' });
-    } catch {
-      toast.error('Failed to send message. Please try again.');
+      setStatus({ ok: true, text: 'Message sent. We usually reply within a few hours.' });
+      setForm(EMPTY);
+    } catch (err) {
+      setStatus({ ok: false, text: err.response?.data?.message || 'Could not send your message. Please try again.' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <PageWrapper>
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] text-gray-900 dark:text-white pt-20 pb-16 transition-colors">
-
-        {/* Header */}
-        <div className="text-center py-14 px-4">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="flex items-center justify-center gap-2.5 mb-3">
-              <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-              <span className="text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider">Get In Touch</span>
-              <div className="w-8 h-0.5 bg-amber-500 rounded-full" />
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-3">Contact Us</h1>
-            <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto text-base">Have a question about renting or partnership? We're available 24/7.</p>
-          </motion.div>
-        </div>
-
-        <div className="max-w-5xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-5 gap-8">
-          {/* Info Panel */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-            className="lg:col-span-2 space-y-5"
-          >
-            {[
-              { icon: MapPin, title: 'Headquarters', lines: ['Shop No. 12, SG Highway', 'Bodakdev, Ahmedabad', 'Gujarat — 380054'] },
-              { icon: Phone, title: 'Direct Phone', lines: ['+91 79-2630-0000', '+91 98765 43210'] },
-              { icon: Mail, title: 'Email Support', lines: ['info@driveaway.in', 'bookings@driveaway.in'] },
-              { icon: Clock, title: 'Operating Hours', lines: ['Monday – Sunday', '7:00 AM – 10:00 PM IST'] },
-            ].map(item => (
-              <div key={item.title} className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-5 flex gap-4 shadow-sm">
-                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <item.icon className="w-5 h-5 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-gray-900 dark:text-white font-bold text-sm">{item.title}</p>
-                  {item.lines.map(line => <p key={line} className="text-gray-600 dark:text-gray-400 text-xs mt-0.5">{line}</p>)}
-                </div>
+    <div className="pt-[72px]">
+      <section style={paintStyle('Luxury')} className="lacquer on-paint">
+        <div className="page-container grid gap-10 py-16 lg:grid-cols-12 lg:py-24">
+          <div className="lg:col-span-6">
+            <h1 className="display text-[clamp(2.8rem,6.5vw,6rem)]">Talk to us.</h1>
+            <p className="mt-6 max-w-md text-lg leading-snug">
+              Questions about a car, a booking, a wedding convoy or a partnership. A person in Ahmedabad will reply.
+            </p>
+          </div>
+          <dl className="grid gap-6 sm:grid-cols-2 lg:col-span-6 lg:pt-3">
+            {DETAILS.map(({ icon: Icon, title, lines, href }) => (
+              <div key={title} className="border-t border-on-paint/30 pt-4">
+                <dt className="flex items-center gap-2 code-label text-[12px]"><Icon className="h-4 w-4" /> {title}</dt>
+                <dd className="mt-2 font-semibold leading-snug">
+                  {href ? <a href={href} className="hover:underline">{lines[0]}</a> : lines[0]}
+                  <span className="block font-normal">{lines[1]}</span>
+                </dd>
               </div>
             ))}
-
-            {/* Map location badge */}
-            <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden h-36 flex items-center justify-center shadow-sm">
-              <div className="text-center">
-                <MapPin className="w-7 h-7 text-amber-500 mx-auto mb-1.5" />
-                <p className="text-gray-900 dark:text-white text-sm font-bold">SG Highway, Bodakdev</p>
-                <p className="text-gray-500 text-xs">Ahmedabad, Gujarat</p>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Contact Form */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="lg:col-span-3"
-          >
-            <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 sm:p-8 shadow-sm">
-              <h2 className="text-gray-900 dark:text-white font-extrabold text-xl mb-6">Send Us a Direct Message</h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>Your Name *</label>
-                    <input required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={inputClass} placeholder="Full Name" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Email Address *</label>
-                    <input type="email" required value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className={inputClass} placeholder="you@email.com" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>Phone Number</label>
-                    <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} className={inputClass} placeholder="9999999999" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Subject</label>
-                    <input value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} className={inputClass} placeholder="Booking inquiry..." />
-                  </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Message *</label>
-                  <textarea required value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value }))} className={`${inputClass} h-36 resize-none`} placeholder="Tell us how we can assist you..." />
-                </div>
-                <Button type="submit" loading={loading} icon={Send} className="w-full font-bold shadow-lg shadow-amber-500/20" size="lg">
-                  Send Message
-                </Button>
-              </form>
-            </div>
-          </motion.div>
+          </dl>
         </div>
-      </div>
-    </PageWrapper>
+      </section>
+
+      <section className="page-container py-16 lg:py-20">
+        <div className="grid gap-12 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <h2 className="font-wide font-black uppercase tracking-tight text-2xl">Send a message</h2>
+            <p className="mt-3 text-muted">Fields marked * are required. We never share your details.</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:col-span-8">
+            <label className="block">
+              <span className="field-label">Your name *</span>
+              <input required value={form.name} onChange={set('name')} autoComplete="name" className="field" />
+            </label>
+            <label className="block">
+              <span className="field-label">Email *</span>
+              <input type="email" required value={form.email} onChange={set('email')} autoComplete="email" className="field" />
+            </label>
+            <label className="block">
+              <span className="field-label">Phone</span>
+              <input type="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" className="field" />
+            </label>
+            <label className="block">
+              <span className="field-label">Subject</span>
+              <input value={form.subject} onChange={set('subject')} placeholder="Booking question" className="field" />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="field-label">Message *</span>
+              <textarea required value={form.message} onChange={set('message')} rows={6} maxLength={3000} className="field resize-y" />
+            </label>
+
+            {status && (
+              <p role={status.ok ? 'status' : 'alert'} className={`sm:col-span-2 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${status.ok ? 'bg-ok/10 text-ok' : 'bg-danger/10 text-danger'}`}>
+                {status.ok && <Check className="h-4 w-4" />} {status.text}
+              </p>
+            )}
+
+            <div className="sm:col-span-2">
+              <Button type="submit" loading={loading} className="!px-8 !py-4 text-base">
+                Send message <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
   );
 }

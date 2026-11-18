@@ -22,4 +22,12 @@ const userSchema = new mongoose.Schema({
   loyaltyPoints:     { type: Number, default: 0 },
 }, { timestamps: true });
 
+// Never return the password hash unless explicitly asked for
+userSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    delete ret.password;
+    return ret;
+  },
+});
+
 module.exports = mongoose.model('User', userSchema);

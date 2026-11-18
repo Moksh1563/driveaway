@@ -1,23 +1,61 @@
 /** @type {import('tailwindcss').Config} */
+const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
-      fontFamily: { sans: ['Inter', 'sans-serif'] },
-      colors: {
-        dark: { DEFAULT: '#0D0D0D', card: '#1A1A1A', border: 'rgba(255,255,255,0.08)' },
-        light: { bg: '#F9FAFB' }
+      fontFamily: {
+        sans: ['Archivo', 'system-ui', 'sans-serif'],
       },
-      animation: {
-        'fade-in': 'fadeIn 0.5s ease-in-out',
-        'slide-up': 'slideUp 0.5s ease-out',
+      colors: {
+        // Neutral world: primer (light) / clear-coat (dark). All chrome uses these.
+        ground: token('ground'),
+        surface: token('surface'),
+        raised: token('raised'),
+        ink: token('ink'),
+        muted: token('muted'),
+        line: token('line'),
+        // The paint currently on show (set per page/section via --paint / --on-paint)
+        paint: token('paint'),
+        'on-paint': token('on-paint'),
+        // Fixed factory paints (one per car category)
+        lacquer: {
+          blue: '#1F3C88',
+          red: '#D0021B',
+          green: '#0F4D2E',
+          yellow: '#F2B705',
+          teal: '#0B7785',
+          orange: '#E8590C',
+          graphite: '#4A4E57',
+          lilac: '#7B61C9',
+        },
+        ok: '#1E8E4E',
+        warn: '#B7791F',
+        danger: '#C81E1E',
+      },
+      borderRadius: {
+        chip: '18px',
+      },
+      boxShadow: {
+        chip: '0 1px 0 rgb(255 255 255 / 0.18) inset, 0 18px 40px -18px rgb(0 0 0 / 0.55)',
+        lift: '0 24px 60px -24px rgb(0 0 0 / 0.45)',
+        soft: '0 8px 24px -12px rgb(0 0 0 / 0.25)',
+      },
+      transitionTimingFunction: {
+        out: 'cubic-bezier(0.16, 1, 0.3, 1)',
       },
       keyframes: {
-        fadeIn: { '0%': { opacity: 0 }, '100%': { opacity: 1 } },
-        slideUp: { '0%': { transform: 'translateY(20px)', opacity: 0 }, '100%': { transform: 'translateY(0)', opacity: 1 } },
-      }
-    }
+        wipe: {
+          '0%': { clipPath: 'circle(0% at var(--wipe-x, 50%) 100%)' },
+          '100%': { clipPath: 'circle(150% at var(--wipe-x, 50%) 100%)' },
+        },
+      },
+      animation: {
+        wipe: 'wipe 650ms cubic-bezier(0.16, 1, 0.3, 1) both',
+      },
+    },
   },
-  plugins: [require('@tailwindcss/forms')]
-}
+  plugins: [require('@tailwindcss/forms')],
+};

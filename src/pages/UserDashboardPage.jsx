@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Calendar, User, Star, Download, X, ChevronRight, Gift, Eye, CheckCircle2, MessageCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Star, Download, X, MessageCircle, ArrowRight, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import PageWrapper from '../components/layout/PageWrapper';
 import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
@@ -12,8 +11,8 @@ import Modal from '../components/ui/Modal';
 import StarRating from '../components/ui/StarRating';
 import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceGenerator';
 import RazorpayModal from '../components/payment/RazorpayModal';
-
-const inputClass = 'w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl px-4 py-3 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none placeholder-gray-400 dark:placeholder-gray-500 shadow-xs transition-all';
+import { sizedImage, handleImageError } from '../utils/image';
+import { paintFor, paintStyle, rupees } from '../theme/paints';
 
 const TABS = ['Overview', 'My Bookings', 'Profile'];
 
@@ -70,7 +69,7 @@ export default function UserDashboardPage() {
   const handleReview = async () => {
     try {
       await api.post('/reviews', { bookingId: reviewModal._id, ...review });
-      toast.success('Review submitted! Thank you 🌟');
+      toast.success('Thanks for your review');
       setReviewModal(null);
       fetchBookings();
     } catch (err) {
@@ -83,9 +82,9 @@ export default function UserDashboardPage() {
     try {
       const { data } = await api.put('/auth/profile', profileForm);
       updateUser(data);
-      toast.success('Profile updated!');
+      toast.success('Details saved');
     } catch {
-      toast.error('Failed to update profile');
+      toast.error('Could not save your details');
     } finally {
       setSaving(false);
     }
@@ -95,7 +94,7 @@ export default function UserDashboardPage() {
     setSaving(true);
     try {
       await api.put('/auth/password', pwForm);
-      toast.success('Password changed!');
+      toast.success('Password changed');
       setPwForm({ oldPassword: '', newPassword: '' });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to change password');
@@ -111,227 +110,214 @@ export default function UserDashboardPage() {
     completed: bookings.filter(b => b.status === 'Completed').length
   };
 
+  const firstName = user?.name?.split(' ')[0] || 'Your';
+  const points = user?.loyaltyPoints || 0;
+  const garage = bookings.filter((b) => b.car && b.status !== 'Cancelled');
+
   return (
-    <PageWrapper>
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] text-gray-900 dark:text-white pt-20 pb-16 transition-colors">
-        <div className="max-w-5xl mx-auto px-4">
-
-          {/* Header */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-            <h1 className="text-gray-900 dark:text-white text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, {user?.name?.split(' ')[0]}! 👋
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium">{user?.email}</p>
-          </motion.div>
-
-          {/* Tabs */}
-          <div className="flex gap-1.5 bg-gray-200 dark:bg-white/5 rounded-2xl p-1.5 mb-8 w-fit shadow-xs">
-            {TABS.map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === tab
-                    ? 'bg-amber-500 text-black shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+    <div className="pt-[72px]">
+      {/* Head */}
+      <section className="border-b border-line">
+        <div className="page-container pt-12 pb-8">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <h1 className="display text-[clamp(2.6rem,6vw,5rem)]">{firstName}&apos;s garage</h1>
+              <p className="mt-3 text-muted">{user?.email}</p>
+            </div>
+            <p className="max-w-xs text-right text-sm text-muted">
+              <span className="block font-wide font-black text-3xl text-ink">{points.toLocaleString('en-IN')} pts</span>
+              worth {rupees(Math.floor(points / 10))} off your next booking
+            </p>
           </div>
 
-          {/* OVERVIEW */}
-          {activeTab === 'Overview' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                {[
-                  { label: 'Total Bookings', value: stats.total, icon: Calendar, color: 'text-blue-500' },
-                  { label: 'Active Rentals', value: stats.active, icon: ChevronRight, color: 'text-green-500' },
-                  { label: 'Loyalty Points', value: user?.loyaltyPoints || 0, icon: Gift, color: 'text-amber-500' },
-                ].map(s => (
-                  <div key={s.label} className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 shadow-sm">
-                    <div className={`${s.color} mb-3`}><s.icon className="w-6 h-6" /></div>
-                    <div className="text-gray-900 dark:text-white text-3xl font-black">{s.value.toLocaleString('en-IN')}</div>
-                    <div className="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider mt-1">{s.label}</div>
-                    {s.label === 'Loyalty Points' && (
-                      <div className="text-amber-600 dark:text-amber-400 text-xs font-bold mt-2">
-                        = ₹{((user?.loyaltyPoints || 0) / 10).toFixed(0)} discount value
-                      </div>
-                    )}
-                  </div>
+          {/* Garage ring: one paint chip for every car you have booked */}
+          <div className="mt-10">
+            {loadingBookings ? (
+              <div className="flex gap-2">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-24 w-44 rounded-t-[16px] rounded-b-none" />)}</div>
+            ) : garage.length === 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-chip border border-dashed border-line p-6">
+                <p className="text-muted">Your garage is empty. Every car you book parks a paint chip here.</p>
+                <Link to="/fleet" className="btn-ink">Find a car <ArrowRight className="h-4 w-4" /></Link>
+              </div>
+            ) : (
+              <ul className="-mx-4 flex items-end gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" aria-label="Cars you have booked">
+                {garage.map((b) => {
+                  const p = paintFor(b.car.type);
+                  const live = ['Pending', 'Confirmed'].includes(b.status);
+                  return (
+                    <li key={b._id}>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab('My Bookings'); setBookingFilter('All'); setTimeout(() => document.getElementById(`b-${b._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }}
+                        style={paintStyle(b.car.type)}
+                        className={`lacquer flex w-44 flex-col justify-between rounded-t-[16px] px-4 pt-3 pb-4 text-left transition-transform hover:-translate-y-1 ${live ? 'h-32' : 'h-24 unlit'}`}
+                      >
+                        <span className="code-label text-[10px]">{b.status} · Paint {p.no}</span>
+                        <span className="font-wide font-black uppercase leading-tight tracking-tight text-[13px]">{b.car.name}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <div className="page-container py-10">
+        {/* Tabs */}
+        <div role="tablist" aria-label="Garage sections" className="mb-10 flex gap-6 border-b border-line">
+          {TABS.map((tab) => (
+            <button
+              key={tab}
+              role="tab"
+              type="button"
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={`-mb-px border-b-2 pb-3 text-sm font-semibold transition-colors ${activeTab === tab ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'}`}
+            >
+              {tab === 'Overview' ? 'Overview' : tab === 'My Bookings' ? `Bookings (${bookings.length})` : 'Profile'}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'Overview' && (
+          <div className="grid gap-10 lg:grid-cols-12">
+            <div className="min-w-0 lg:col-span-8">
+              <h2 className="font-wide font-black uppercase tracking-tight text-xl">Latest bookings</h2>
+              <div className="mt-5 space-y-4">
+                {loadingBookings ? <Spinner /> : bookings.length === 0 ? (
+                  <p className="text-muted">No bookings yet.</p>
+                ) : bookings.slice(0, 3).map((b) => (
+                  <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} />
                 ))}
               </div>
-
-              <div>
-                <h2 className="text-gray-900 dark:text-white font-extrabold text-xl mb-4">Recent Bookings</h2>
-                <div className="space-y-4">
-                  {bookings.slice(0, 3).map(b => (
-                    <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} />
-                  ))}
-                </div>
-                {bookings.length > 3 && (
-                  <button onClick={() => setActiveTab('My Bookings')} className="text-amber-500 font-bold text-sm mt-4 hover:text-amber-400">
-                    View all bookings →
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* MY BOOKINGS */}
-          {activeTab === 'My Bookings' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-              <div className="flex flex-wrap gap-2 mb-4">
-                {['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'].map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setBookingFilter(f)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-                      bookingFilter === f
-                        ? 'bg-amber-500 border-amber-500 text-black shadow-sm'
-                        : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-amber-500'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-              {loadingBookings ? (
-                <Spinner />
-              ) : filteredBookings.length === 0 ? (
-                <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-12 text-center text-gray-500 shadow-sm">
-                  No bookings found in this category.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredBookings.map(b => (
-                    <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} full />
-                  ))}
-                </div>
+              {bookings.length > 3 && (
+                <button type="button" onClick={() => setActiveTab('My Bookings')} className="btn-line mt-6">
+                  All {bookings.length} bookings <ArrowRight className="h-4 w-4" />
+                </button>
               )}
-            </motion.div>
-          )}
+            </div>
+            <aside className="lg:col-span-4">
+              <dl className="divide-y divide-line rounded-chip border border-line">
+                <div className="flex items-baseline justify-between p-5"><dt className="text-muted">Bookings</dt><dd className="font-wide font-black text-2xl">{stats.total}</dd></div>
+                <div className="flex items-baseline justify-between p-5"><dt className="text-muted">On the road now</dt><dd className="font-wide font-black text-2xl">{stats.active}</dd></div>
+                <div className="flex items-baseline justify-between p-5"><dt className="text-muted">Completed</dt><dd className="font-wide font-black text-2xl">{stats.completed}</dd></div>
+              </dl>
+              <div className="mt-6 rounded-chip border border-line p-5 text-sm">
+                <p className="font-semibold">How loyalty points work</p>
+                <ul className="mt-3 space-y-1.5 text-muted">
+                  <li>Earn 1 point for every ₹100 you spend.</li>
+                  <li>10 points take ₹1 off at checkout.</li>
+                  <li>Use points for up to half of a booking.</li>
+                </ul>
+              </div>
+            </aside>
+          </div>
+        )}
 
-          {/* PROFILE */}
-          {activeTab === 'Profile' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 sm:p-7 space-y-4 shadow-sm">
-                <h2 className="text-gray-900 dark:text-white font-extrabold text-lg">Edit Personal Profile</h2>
+        {activeTab === 'My Bookings' && (
+          <div>
+            <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter bookings by status">
+              {['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'].map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  aria-pressed={bookingFilter === f}
+                  onClick={() => setBookingFilter(f)}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${bookingFilter === f ? 'border-ink bg-ink text-ground' : 'border-line hover:border-ink'}`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            {loadingBookings ? <Spinner /> : filteredBookings.length === 0 ? (
+              <p className="rounded-chip border border-dashed border-line p-12 text-center text-muted">No {bookingFilter === 'All' ? '' : bookingFilter.toLowerCase() + ' '}bookings.</p>
+            ) : (
+              <div className="space-y-4">
+                {filteredBookings.map((b) => (
+                  <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} full />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'Profile' && (
+          <div className="grid gap-10 lg:grid-cols-12">
+            <form className="lg:col-span-7" onSubmit={(e) => { e.preventDefault(); handleProfileSave(); }}>
+              <h2 className="font-wide font-black uppercase tracking-tight text-xl">Driver details</h2>
+              <p className="mt-2 text-sm text-muted">Saved details pre-fill your next booking.</p>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {Object.entries({
-                  name: 'Full Name',
-                  phone: 'Phone Number',
-                  address: 'Current Address',
-                  licenseNumber: 'Driving License Number',
-                  drivingExperience: 'Driving Experience (Years)',
-                  emergencyContact: 'Emergency Contact Person',
-                  emergencyPhone: 'Emergency Phone'
+                  name: 'Full name',
+                  phone: 'Phone',
+                  licenseNumber: 'Driving licence number',
+                  drivingExperience: 'Years of driving',
+                  emergencyContact: 'Emergency contact',
+                  emergencyPhone: 'Emergency phone',
+                  address: 'Address',
                 }).map(([key, label]) => (
-                  <div key={key}>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">{label}</label>
+                  <label key={key} className={`block ${key === 'address' ? 'sm:col-span-2' : ''}`}>
+                    <span className="field-label">{label}</span>
                     <input
                       value={profileForm[key] || ''}
-                      onChange={e => setProfileForm(p => ({ ...p, [key]: e.target.value }))}
-                      className={inputClass}
+                      onChange={(e) => setProfileForm((p) => ({ ...p, [key]: e.target.value }))}
+                      inputMode={key === 'drivingExperience' ? 'numeric' : undefined}
+                      className="field"
                     />
-                  </div>
+                  </label>
                 ))}
-                <Button onClick={handleProfileSave} loading={saving} className="w-full font-bold" size="lg">
-                  Save Changes
-                </Button>
               </div>
+              <Button type="submit" loading={saving} className="mt-6">Save details</Button>
+            </form>
 
-              <div className="space-y-6">
-                <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 sm:p-7 space-y-4 shadow-sm">
-                  <h2 className="text-gray-900 dark:text-white font-extrabold text-lg">Change Password</h2>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">Current Password</label>
-                    <input
-                      type="password"
-                      value={pwForm.oldPassword}
-                      onChange={e => setPwForm(p => ({ ...p, oldPassword: e.target.value }))}
-                      className={inputClass}
-                      placeholder="••••••••"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">New Password</label>
-                    <input
-                      type="password"
-                      value={pwForm.newPassword}
-                      onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))}
-                      className={inputClass}
-                      placeholder="••••••••"
-                    />
-                  </div>
-                  <Button onClick={handlePasswordChange} loading={saving} variant="secondary" className="w-full font-bold" size="lg">
-                    Update Password
-                  </Button>
-                </div>
-
-                <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/30 rounded-2xl p-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Gift className="w-8 h-8 text-amber-500" />
-                    <div>
-                      <div className="text-gray-900 dark:text-white font-black text-2xl">{user?.loyaltyPoints || 0}</div>
-                      <div className="text-gray-600 dark:text-gray-400 text-xs font-bold uppercase tracking-wider">Loyalty Points Available</div>
-                    </div>
-                  </div>
-                  <div className="text-gray-600 dark:text-gray-400 text-xs space-y-1.5 font-medium">
-                    <p>• Earn 1 point per ₹100 spent on any booking</p>
-                    <p>• 10 points = ₹1 instant discount at checkout</p>
-                    <p>• Redeem up to 50% of your total rental cost</p>
-                    <p className="text-amber-600 dark:text-amber-400 font-bold">• Total cash value: ₹{((user?.loyaltyPoints || 0) / 10).toFixed(0)}</p>
-                  </div>
-                </div>
+            <form className="lg:col-span-5" onSubmit={(e) => { e.preventDefault(); handlePasswordChange(); }}>
+              <h2 className="font-wide font-black uppercase tracking-tight text-xl">Password</h2>
+              <p className="mt-2 text-sm text-muted">At least 8 characters, with a letter and a number.</p>
+              <div className="mt-6 space-y-4">
+                <label className="block">
+                  <span className="field-label">Current password</span>
+                  <input type="password" autoComplete="current-password" value={pwForm.oldPassword} onChange={(e) => setPwForm((p) => ({ ...p, oldPassword: e.target.value }))} className="field" />
+                </label>
+                <label className="block">
+                  <span className="field-label">New password</span>
+                  <input type="password" autoComplete="new-password" value={pwForm.newPassword} onChange={(e) => setPwForm((p) => ({ ...p, newPassword: e.target.value }))} className="field" />
+                </label>
               </div>
-            </motion.div>
-          )}
-        </div>
+              <Button type="submit" variant="secondary" loading={saving} className="mt-6">Change password</Button>
+            </form>
+          </div>
+        )}
       </div>
 
-      {/* Cancel Modal */}
-      <Modal isOpen={!!cancelModal} onClose={() => setCancelModal(null)} title="Cancel Booking">
-        <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">
-          Are you sure you want to cancel booking <span className="text-amber-500 font-mono font-bold">{cancelModal?.invoiceNumber}</span>?
+      <Modal isOpen={!!cancelModal} onClose={() => setCancelModal(null)} title="Cancel booking">
+        <p className="text-sm text-muted">
+          Cancel booking <span className="font-semibold text-ink">{cancelModal?.invoiceNumber}</span> for the {cancelModal?.car?.name}? This cannot be undone.
         </p>
-        <div className="mb-4">
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">Reason for Cancellation (optional)</label>
-          <textarea
-            value={cancelReason}
-            onChange={e => setCancelReason(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl p-3 text-gray-900 dark:text-white text-sm h-24 resize-none outline-none focus:ring-2 focus:ring-amber-500"
-            placeholder="Why are you cancelling?"
-          />
-        </div>
-        <div className="flex gap-3">
-          <Button variant="ghost" onClick={() => setCancelModal(null)} className="flex-1">Keep Booking</Button>
-          <Button variant="danger" onClick={handleCancel} className="flex-1">Yes, Cancel</Button>
+        <label className="mt-5 block">
+          <span className="field-label">Reason (optional)</span>
+          <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={3} maxLength={300} className="field resize-none" />
+        </label>
+        <div className="mt-6 flex gap-3">
+          <Button variant="secondary" onClick={() => setCancelModal(null)} className="flex-1">Keep booking</Button>
+          <Button variant="danger" onClick={handleCancel} className="flex-1">Cancel booking</Button>
         </div>
       </Modal>
 
-      {/* Review Modal */}
-      <Modal isOpen={!!reviewModal} onClose={() => setReviewModal(null)} title="Rate & Review Your Trip">
-        <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
-          How was your driving experience with <span className="text-gray-900 dark:text-white font-bold">{reviewModal?.car?.name}</span>?
-        </p>
-        <div className="mb-4">
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Overall Rating</label>
-          <StarRating value={review.rating} onChange={r => setReview(p => ({ ...p, rating: r }))} size="lg" />
+      <Modal isOpen={!!reviewModal} onClose={() => setReviewModal(null)} title="Review your drive">
+        <p className="text-sm text-muted">How was the <span className="font-semibold text-ink">{reviewModal?.car?.name}</span>?</p>
+        <div className="mt-5">
+          <span className="field-label">Rating</span>
+          <StarRating value={review.rating} onChange={(r) => setReview((p) => ({ ...p, rating: r }))} size="lg" />
         </div>
-        <div className="mb-5">
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">Your Feedback</label>
-          <textarea
-            value={review.reviewText}
-            onChange={e => setReview(p => ({ ...p, reviewText: e.target.value }))}
-            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl p-3 text-gray-900 dark:text-white text-sm h-24 resize-none outline-none focus:ring-2 focus:ring-amber-500"
-            placeholder="Share details about car condition, pickup process, driving feel..."
-          />
-        </div>
-        <Button onClick={handleReview} className="w-full font-bold" size="lg">Submit Review ⭐</Button>
+        <label className="mt-5 block">
+          <span className="field-label">Your review</span>
+          <textarea value={review.reviewText} onChange={(e) => setReview((p) => ({ ...p, reviewText: e.target.value }))} rows={4} maxLength={1000} placeholder="The car's condition, the pickup, how it drove…" className="field resize-none" />
+        </label>
+        <Button onClick={handleReview} className="mt-6 w-full !py-4">Post review</Button>
       </Modal>
 
-      {/* Razorpay Online Payment Gateway Modal */}
       <RazorpayModal
         isOpen={!!payBooking}
         onClose={() => setPayBooking(null)}
@@ -345,92 +331,79 @@ export default function UserDashboardPage() {
               paymentId: paymentData.paymentId,
               paymentMethod: paymentData.paymentMethod,
             });
-            toast.success('Payment completed via Razorpay! 🎉');
+            toast.success('Payment received');
             setPayBooking(null);
             fetchBookings();
-          } catch (e) {
-            toast.error('Failed to update payment status');
+          } catch {
+            toast.error('Payment went through but we could not update the booking. Please contact us.');
           }
         }}
       />
-    </PageWrapper>
+    </div>
   );
 }
 
+const shortDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
 function BookingRow({ booking, onCancel, onReview, onPay, full }) {
+  const type = booking.car?.type;
+  const p = paintFor(type);
+  const live = ['Pending', 'Confirmed'].includes(booking.status);
   return (
-    <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-5 shadow-sm">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <img
-          src={booking.car?.images?.main}
-          alt={booking.car?.name}
-          className="w-24 h-16 object-cover rounded-xl flex-shrink-0 bg-gray-100 dark:bg-gray-800"
-          onError={e => { e.target.style.display = 'none'; }}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-gray-900 dark:text-white font-bold text-base leading-tight">{booking.car?.name || 'Vehicle'}</p>
-              <p className="text-amber-500 text-xs font-mono font-bold mt-0.5">{booking.invoiceNumber}</p>
-            </div>
+    <article id={`b-${booking._id}`} className="scroll-mt-28 overflow-hidden rounded-chip border border-line bg-surface">
+      <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
+        <div className="relative h-20 w-full flex-shrink-0 overflow-hidden rounded-xl bg-ink/5 sm:w-32">
+          <img
+            src={sizedImage(booking.car?.images?.main, 320)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={(e) => handleImageError(e, 320)}
+            className={`h-full w-full object-cover ${live ? '' : 'unlit'}`}
+          />
+          {type && <span className="absolute bottom-0 left-0 right-0 h-1.5" style={{ background: p.hex }} aria-hidden="true" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-wide font-black uppercase tracking-tight">{booking.car?.name || 'Car'}</h3>
             <Badge status={booking.status} />
           </div>
-          {full && (
-            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400 font-medium">
-              <span>📅 {new Date(booking.pickupDate).toLocaleDateString('en-IN')} → {new Date(booking.returnDate).toLocaleDateString('en-IN')}</span>
-              {booking.pickupLocation && <span>📍 {booking.pickupLocation}</span>}
-            </div>
-          )}
-          <div className="flex items-center gap-3 mt-2.5">
-            <span className="text-amber-500 font-extrabold text-base">₹{booking.totalAmount?.toLocaleString('en-IN')}</span>
-            {booking.paymentCompleted ? (
-              <span className="text-green-600 dark:text-green-400 text-xs font-bold">✓ Paid</span>
-            ) : (
-              <span className="text-yellow-600 dark:text-yellow-400 text-xs font-bold">⏳ Pay at Pickup</span>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2 flex-shrink-0 pt-2 sm:pt-0">
-          {!booking.paymentCompleted && booking.status !== 'Cancelled' && onPay && (
-            <button
-              onClick={() => onPay(booking)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors shadow-xs"
-              title="Pay online with Razorpay"
-            >
-              ⚡ Pay with Razorpay
-            </button>
-          )}
-          <button
-            onClick={() => generatePDF(booking, booking.car)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-700 dark:text-gray-300 text-xs font-bold hover:border-amber-500 hover:text-amber-500 transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" /> Invoice PDF
-          </button>
-          <button
-            onClick={() => sendWhatsAppInvoice(booking, booking.car)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
-            title="Share Invoice on WhatsApp"
-          >
-            <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-          </button>
-          {['Pending', 'Confirmed'].includes(booking.status) && (
-            <button
-              onClick={() => onCancel(booking)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-red-600 dark:text-red-400 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
-            >
-              <X className="w-3.5 h-3.5" /> Cancel
-            </button>
-          )}
-          {booking.status === 'Completed' && (
-            <button
-              onClick={() => onReview(booking)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-amber-600 dark:text-amber-400 text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
-            >
-              <Star className="w-3.5 h-3.5" /> Rate & Review
-            </button>
-          )}
+          <p className="mt-1 text-sm text-muted">
+            {booking.invoiceNumber}
+            {full && ` · ${shortDate(booking.pickupDate)} to ${shortDate(booking.returnDate)}`}
+            {full && booking.pickupLocation && ` · ${booking.pickupLocation}`}
+          </p>
+          <p className="mt-2 text-sm">
+            <span className="font-wide font-black text-base">{rupees(booking.totalAmount)}</span>
+            <span className={`ml-2 ${booking.paymentCompleted ? 'text-ok' : 'text-warn'}`}>
+              {booking.paymentCompleted ? 'Paid' : 'Pay at pickup'}
+            </span>
+          </p>
         </div>
       </div>
-    </div>
+      <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3">
+          {!booking.paymentCompleted && booking.status !== 'Cancelled' && onPay && (
+            <button type="button" onClick={() => onPay(booking)} className="btn-ink !px-4 !py-2.5">
+              <CreditCard className="h-4 w-4" /> Pay now
+            </button>
+          )}
+          <button type="button" onClick={() => generatePDF(booking, booking.car)} className="btn-line !px-4 !py-2.5" aria-label={`Download invoice ${booking.invoiceNumber}`}>
+            <Download className="h-4 w-4" /> Invoice
+          </button>
+          <button type="button" onClick={() => sendWhatsAppInvoice(booking, booking.car)} className="btn-line !px-4 !py-2.5">
+            <MessageCircle className="h-4 w-4" /> WhatsApp
+          </button>
+          {booking.status === 'Completed' && (
+            <button type="button" onClick={() => onReview(booking)} className="btn-line !px-4 !py-2.5">
+              <Star className="h-4 w-4" /> Review
+            </button>
+          )}
+          {live && (
+            <button type="button" onClick={() => onCancel(booking)} className="btn-ghost !px-4 !py-2.5 text-danger hover:!bg-danger/10">
+              <X className="h-4 w-4" /> Cancel
+            </button>
+          )}
+      </div>
+    </article>
   );
 }

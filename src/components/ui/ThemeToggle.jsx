@@ -1,29 +1,19 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
-export default function ThemeToggle() {
+export default function ThemeToggle({ className = '' }) {
   const { theme, toggleTheme } = useTheme();
-
+  const dark = theme === 'dark';
   return (
     <button
+      type="button"
       onClick={toggleTheme}
-      className="relative w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-200"
-      aria-label="Toggle theme"
+      className={`w-10 h-10 grid place-items-center rounded-full border border-line text-ink hover:border-ink transition-colors ${className}`}
+      aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      title={dark ? 'Switch to light' : 'Switch to dark'}
     >
-      <motion.div
-        key={theme}
-        initial={{ rotate: -90, opacity: 0 }}
-        animate={{ rotate: 0, opacity: 1 }}
-        transition={{ duration: 0.2 }}
-      >
-        {theme === 'dark' ? (
-          <Sun className="w-4 h-4 text-amber-400" />
-        ) : (
-          <Moon className="w-4 h-4 text-gray-600" />
-        )}
-      </motion.div>
+      {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
     </button>
   );
 }

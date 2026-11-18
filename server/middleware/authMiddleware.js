@@ -6,8 +6,9 @@ const protect = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+      req.user = await User.findById(decoded.id).select('-password').lean();
+      if (req.user) req.user.id = req.user._id.toString();
       if (!req.user) return res.status(401).json({ message: 'User not found' });
       next();
     } catch (error) {
@@ -23,8 +24,9 @@ const optionalProtect = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+      req.user = await User.findById(decoded.id).select('-password').lean();
+      if (req.user) req.user.id = req.user._id.toString();
     } catch (error) {
       // Ignore token failure for optional auth
     }

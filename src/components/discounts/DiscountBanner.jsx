@@ -43,31 +43,31 @@ export default function DiscountBanner() {
   };
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-600/5 dark:from-amber-500/10 dark:via-black dark:to-amber-500/5 border border-amber-500/30 rounded-3xl p-8 sm:p-12 shadow-xl">
+    <div className="relative overflow-hidden border border-ink/30 rounded-[24px] p-8 sm:p-12 shadow-xl">
       {/* Dismiss / Close Banner Button */}
       <button
         type="button"
         onClick={() => setDismissed(true)}
         title="Dismiss discount notification"
         aria-label="Dismiss discount notification"
-        className="absolute top-4 right-4 z-20 p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+        className="absolute top-4 right-4 z-20 p-2 text-muted hover:text-ink dark:text-muted rounded-full bg-black/5 hover:bg-black/10 transition-all focus:outline-none focus:ring-2 focus:ring-ink/30"
       >
         <X className="w-5 h-5" />
       </button>
 
-      <div className="absolute -top-12 -right-12 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-12 -right-12 w-48 h-48 bg-ink/20 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 max-w-3xl mx-auto text-center space-y-4">
-        <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-500/30 text-amber-700 dark:text-amber-300 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider">
+        <div className="inline-flex items-center gap-2 bg-ink/20 border border-ink/30 text-ink dark:text-ink px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           Exclusive Driver Perks
         </div>
 
-        <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white">
+        <h2 className="text-3xl sm:text-4xl font-black text-ink">
           Get Instant Discount Notifications & Promo Codes
         </h2>
 
-        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 max-w-xl mx-auto leading-relaxed">
+        <p className="text-sm sm:text-base text-muted max-w-xl mx-auto leading-relaxed">
           Subscribe with your email to receive flash deals, festival offers, and secret coupon codes for up to 30% off across Ahmedabad!
         </p>
 
@@ -75,7 +75,7 @@ export default function DiscountBanner() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center justify-center gap-3 p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-2xl max-w-md mx-auto text-sm font-bold"
+            className="flex items-center justify-center gap-3 p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-chip max-w-md mx-auto text-sm font-bold"
           >
             <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
             <span>{successMsg}</span>
@@ -89,12 +89,12 @@ export default function DiscountBanner() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email address"
-                className="flex-1 bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl px-5 py-3.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                className="flex-1 bg-raised border border-line rounded-chip px-5 py-3.5 text-sm text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ink/30 shadow-sm"
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-extrabold text-sm px-6 py-3.5 rounded-2xl transition-all shadow-lg shadow-amber-500/20 flex-shrink-0"
+                className="inline-flex items-center justify-center gap-2 bg-ink hover:bg-ink/85 disabled:opacity-50 text-ground font-extrabold text-sm px-6 py-3.5 rounded-chip transition-all shadow-lg flex-shrink-0"
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -114,8 +114,8 @@ export default function DiscountBanner() {
               </div>
             )}
 
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              🔒 No spam ever. We only email you verified promo codes and discount announcements.
+            <p className="text-[11px] text-muted">
+              No spam ever. We only email you verified promo codes and discount announcements.
             </p>
           </form>
         )}

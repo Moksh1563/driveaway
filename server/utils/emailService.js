@@ -1,5 +1,15 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
+const { escapeHtml } = require('../middleware/securityMiddleware');
+
+// Escape user-controlled booking fields before they are embedded in email HTML
+const safeBooking = (booking) => {
+  const obj = booking && typeof booking.toObject === 'function' ? booking.toObject() : { ...booking };
+  ['customerName', 'pickupLocation', 'discountCode', 'paymentMethod', 'invoiceNumber'].forEach((k) => {
+    if (obj[k] !== undefined && obj[k] !== null) obj[k] = escapeHtml(obj[k]);
+  });
+  return obj;
+};
 
 const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -35,7 +45,8 @@ const formatDate = (dateStr) => {
 /**
  * Send Booking Confirmation Email
  */
-const sendBookingConfirmationEmail = async ({ booking, car, user }) => {
+const sendBookingConfirmationEmail = async ({ booking: rawBooking, car, user }) => {
+  const booking = safeBooking(rawBooking);
   try {
     const transporter = createTransporter();
     if (!transporter) return;
@@ -203,7 +214,12 @@ const sendBookingConfirmationEmail = async ({ booking, car, user }) => {
 /**
  * Send Contact Message Confirmation (User + Admin notification)
  */
-const sendContactMessageEmail = async ({ name, email, phone, subject, message }) => {
+const sendContactMessageEmail = async (raw) => {
+  const email = raw.email;
+  const name = escapeHtml(raw.name);
+  const phone = escapeHtml(raw.phone);
+  const subject = escapeHtml(raw.subject);
+  const message = escapeHtml(raw.message).replace(/\n/g, '<br>');
   try {
     const transporter = createTransporter();
     if (!transporter) return;
@@ -259,7 +275,8 @@ const sendContactMessageEmail = async ({ name, email, phone, subject, message })
 /**
  * Send Booking Status Update Email (Admin updates status: Confirmed, Completed, Cancelled)
  */
-const sendBookingStatusUpdateEmail = async ({ booking, newStatus }) => {
+const sendBookingStatusUpdateEmail = async ({ booking: rawBooking, newStatus }) => {
+  const booking = safeBooking(rawBooking);
   try {
     const transporter = createTransporter();
     if (!transporter) return;
@@ -390,7 +407,9 @@ const sendCarAvailabilityEmail = async ({ recipientEmail, car }) => {
 /**
  * Send Discount Announcement / Broadcast Email
  */
-const sendDiscountBroadcastEmail = async ({ recipientEmail, recipientName, discountCode, percentageOff, maxDiscount, description }) => {
+const sendDiscountBroadcastEmail = async ({ recipientEmail, recipientName: rawName, discountCode, percentageOff, maxDiscount, description: rawDescription }) => {
+  const recipientName = escapeHtml(rawName);
+  const description = escapeHtml(rawDescription);
   try {
     const transporter = createTransporter();
     if (!transporter) return;

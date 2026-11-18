@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { CheckCircle, Download, LayoutDashboard, Calendar, MapPin, Car, MessageCircle } from 'lucide-react';
+import { Download, MessageCircle, ArrowRight } from 'lucide-react';
 import api from '../api/axios';
 import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceGenerator';
-import PageWrapper from '../components/layout/PageWrapper';
 import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
-import Button from '../components/ui/Button';
+import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
+import { sizedImage, handleImageError } from '../utils/image';
+
+const longDate = (d) => new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
 export default function BookingSuccessPage() {
   const { id } = useParams();
@@ -15,128 +16,96 @@ export default function BookingSuccessPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      try {
-        const { data } = await api.get(`/bookings/${id}`);
-        setBooking(data);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    };
-    fetch();
+    let cancelled = false;
+    api.get(`/bookings/${id}`)
+      .then(({ data }) => { if (!cancelled) setBooking(data); })
+      .catch(() => {})
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
   }, [id]);
 
-  if (loading) {
+  if (loading) return <div className="grid min-h-screen place-items-center pt-[72px]"><Spinner size="lg" /></div>;
+
+  if (!booking) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] flex items-center justify-center">
-        <Spinner size="lg" />
+      <div className="page-container grid min-h-screen place-items-center pt-[72px] text-center">
+        <div>
+          <h1 className="display text-5xl">Booking not found</h1>
+          <Link to="/dashboard" className="btn-ink mt-8">Go to my garage</Link>
+        </div>
       </div>
     );
   }
 
+  const car = booking.car || {};
+  const paint = paintFor(car.type);
+  const paid = booking.paymentCompleted;
+  const points = Math.floor((booking.totalAmount || 0) / 100);
+
   return (
-    <PageWrapper>
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] flex items-center justify-center py-20 px-4 transition-colors">
-        <div className="max-w-lg w-full">
-          {/* Animated check */}
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
-            className="w-20 h-20 bg-green-500/10 border-2 border-green-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-sm"
-          >
-            <CheckCircle className="w-10 h-10 text-green-500" />
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="text-center mb-8"
-          >
-            <h1 className="text-gray-900 dark:text-white text-3xl font-extrabold mb-2">Booking Confirmed! 🎉</h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm">Your car is reserved. Get ready to Driveaway across Ahmedabad!</p>
-          </motion.div>
-
-          {booking && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 sm:p-7 space-y-4 mb-6 shadow-sm"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400 text-xs uppercase font-bold tracking-wider">Invoice No.</span>
-                <span className="text-amber-500 font-mono font-extrabold text-sm">{booking.invoiceNumber}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400 text-sm flex items-center gap-1.5"><Car className="w-4 h-4 text-amber-500" />Vehicle</span>
-                <span className="text-gray-900 dark:text-white font-bold">{booking.car?.name}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400 text-sm flex items-center gap-1.5"><MapPin className="w-4 h-4 text-amber-500" />Pickup Hub</span>
-                <span className="text-gray-900 dark:text-white font-bold">{booking.pickupLocation}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400 text-sm flex items-center gap-1.5"><Calendar className="w-4 h-4 text-amber-500" />Trip Dates</span>
-                <span className="text-gray-900 dark:text-white font-bold text-xs">
-                  {new Date(booking.pickupDate).toLocaleDateString('en-IN')} → {new Date(booking.returnDate).toLocaleDateString('en-IN')}
-                </span>
-              </div>
-              <div className="border-t border-gray-100 dark:border-white/10 pt-3 flex items-center justify-between">
-                <span className="text-gray-700 dark:text-gray-300 font-bold text-sm">Total Amount</span>
-                <span className="text-amber-500 font-black text-2xl">₹{booking.totalAmount?.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400 text-xs uppercase font-bold tracking-wider">Status</span>
-                <Badge status={booking.status} />
-              </div>
-            </motion.div>
-          )}
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="space-y-3"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => booking && generatePDF(booking, booking.car)}
-                icon={Download}
-                className="w-full font-bold"
-                size="lg"
-              >
-                Download PDF
-              </Button>
-              <button
-                type="button"
-                onClick={() => booking && sendWhatsAppInvoice(booking, booking.car)}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-              >
-                <MessageCircle className="w-5 h-5 text-white" />
-                WhatsApp Invoice
+    <div className="pt-[72px]" style={paintStyle(car.type)}>
+      <section className="lacquer on-paint">
+        <div className="page-container grid gap-10 py-14 lg:grid-cols-12 lg:py-20">
+          <div className="min-w-0 lg:col-span-6" style={{ containerType: 'inline-size' }}>
+            {/* Sized so the longest word ("RESERVED.") always fits its column */}
+            <h1 className="display" style={{ fontSize: 'min(5.5rem, calc(100cqw / 8.4))' }}>
+              {paid ? 'The keys are yours.' : 'Your car is reserved.'}
+            </h1>
+            <p className="mt-6 max-w-md text-lg leading-snug">
+              {paid
+                ? `Payment received. Collect your ${car.name} at ${booking.pickupLocation || 'your hub'} on ${longDate(booking.pickupDate)}.`
+                : `Pay in cash when you collect your ${car.name} at ${booking.pickupLocation || 'your hub'}, or pay online from your garage.`}
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button type="button" onClick={() => generatePDF(booking, car)} className="btn !bg-on-paint !text-paint !px-6 !py-3.5">
+                <Download className="h-4 w-4" /> Download invoice
+              </button>
+              <button type="button" onClick={() => sendWhatsAppInvoice(booking, car)} className="btn border border-on-paint/40 !px-6 !py-3.5 hover:border-on-paint">
+                <MessageCircle className="h-4 w-4" /> Send to WhatsApp
               </button>
             </div>
-            <Link
-              to="/dashboard"
-              className="w-full py-3.5 px-6 rounded-full bg-amber-500 hover:bg-amber-400 active:scale-[0.98] text-black font-extrabold text-base flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-amber-500/25"
-            >
-              <LayoutDashboard className="w-5 h-5" />
-              My Dashboard
-            </Link>
-          </motion.div>
+          </div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-center text-gray-500 dark:text-gray-400 text-xs mt-4 font-medium"
-          >
-            You've earned <strong>{Math.floor((booking?.totalAmount || 0) / 100)} loyalty points</strong> for this booking! 🏅
-          </motion.p>
+          {/* Job sheet */}
+          <div className="lg:col-span-6">
+            <div className="overflow-hidden rounded-chip bg-raised text-ink shadow-lift">
+              <div className="relative aspect-[16/7] bg-ink/10">
+                <img src={sizedImage(car.images?.main, 960)} alt={car.name || ''} onError={(e) => handleImageError(e, 960)} className="h-full w-full object-cover" />
+                <span className="lacquer absolute left-4 top-4 rounded-lg px-2.5 py-1.5 code-label text-[11px]">Paint {paint.no} · {car.type}</span>
+              </div>
+              <dl className="divide-y divide-line text-sm">
+                <div className="flex items-center justify-between gap-4 px-6 py-4">
+                  <dt className="text-muted">Invoice</dt><dd className="font-semibold">{booking.invoiceNumber}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-6 py-4">
+                  <dt className="text-muted">Car</dt><dd className="text-right font-semibold">{carTitle(car)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-6 py-4">
+                  <dt className="text-muted">Pickup</dt><dd className="text-right font-semibold">{booking.pickupLocation || 'To be confirmed'}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-6 py-4">
+                  <dt className="text-muted">Dates</dt>
+                  <dd className="text-right font-semibold">{longDate(booking.pickupDate)} to {longDate(booking.returnDate)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-6 py-4">
+                  <dt className="text-muted">Status</dt><dd><Badge status={booking.status} /></dd>
+                </div>
+                <div className="flex items-end justify-between gap-4 bg-ink/[0.03] px-6 py-5">
+                  <dt className="text-muted">{paid ? 'Paid' : 'Due at pickup'}</dt>
+                  <dd className="font-wide font-black text-3xl">{rupees(booking.totalAmount)}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
         </div>
-      </div>
-    </PageWrapper>
+      </section>
+
+      <section className="page-container flex flex-wrap items-center justify-between gap-6 py-12">
+        <p className="text-muted">
+          You earned <strong className="text-ink">{points.toLocaleString('en-IN')} loyalty points</strong> with this booking.
+        </p>
+        <Link to="/dashboard" className="btn-ink">Go to my garage <ArrowRight className="h-4 w-4" /></Link>
+      </section>
+    </div>
   );
 }

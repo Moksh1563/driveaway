@@ -1,115 +1,105 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
-import { LayoutDashboard, Car, Calendar, Users, MessageSquare, LogOut, Menu, X, Home, Tag } from 'lucide-react';
+import React, { Suspense, useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
+import { LayoutDashboard, Car, Calendar, Users, MessageSquare, LogOut, PanelLeftClose, PanelLeftOpen, Home, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../../components/ui/ThemeToggle';
+import Spinner from '../../components/ui/Spinner';
+import Logo from '../../components/layout/Logo';
+import { PAINTS, PAINT_ORDER } from '../../theme/paints';
 
 const NAV = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/cars', label: 'Cars Fleet', icon: Car },
+  { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/admin/cars', label: 'Fleet', icon: Car },
   { to: '/admin/bookings', label: 'Bookings', icon: Calendar },
-  { to: '/admin/users', label: 'Users', icon: Users },
-  { to: '/admin/discounts', label: 'Discounts & Alerts', icon: Tag },
+  { to: '/admin/users', label: 'Customers', icon: Users },
+  { to: '/admin/discounts', label: 'Offers and alerts', icon: Tag },
   { to: '/admin/messages', label: 'Inquiries', icon: MessageSquare },
 ];
-
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024);
+
+  useEffect(() => {
+    if (window.innerWidth < 1024) setCollapsed(true);
+  }, [location.pathname]);
 
   const handleLogout = () => { logout(); navigate('/'); };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] text-gray-900 dark:text-white flex transition-colors">
-      {/* Sidebar */}
-      <aside className={`${collapsed ? 'w-18' : 'w-60'} flex-shrink-0 bg-white dark:bg-[#0A0A0A] border-r border-gray-200 dark:border-white/[0.06] flex flex-col transition-all duration-300 sticky top-0 h-screen z-30`}>
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-100 dark:border-white/[0.06] flex items-center justify-between">
-          {!collapsed && (
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center justify-center">
-                <Car className="w-4 h-4 text-black" />
-              </div>
-              <div>
-                <span className="text-gray-900 dark:text-white font-bold text-base">Drive<span className="text-amber-500">away</span></span>
-                <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded ml-1.5">ADMIN</span>
-              </div>
-            </Link>
-          )}
+    <div className="flex min-h-screen bg-ground text-ink">
+      <aside
+        className={`${collapsed ? 'w-[72px]' : 'w-64'} sticky top-0 z-30 flex h-screen flex-shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-300 ease-out`}
+        aria-label="Admin navigation"
+      >
+        <div className={`flex h-[72px] items-center border-b border-line ${collapsed ? 'justify-center' : 'justify-between px-4'}`}>
+          {!collapsed && <Logo to="/admin" sub="Admin" />}
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
           >
-            {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
+            {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-          {NAV.map(item => (
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+          {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
+              title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-amber-500 text-black shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+                `flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold transition-colors ${collapsed ? 'justify-center px-0' : 'px-3.5'} ${
+                  isActive ? 'bg-ink text-ground' : 'text-muted hover:bg-ink/5 hover:text-ink'
                 }`
               }
             >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
+              <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
               {!collapsed && <span>{item.label}</span>}
             </NavLink>
           ))}
         </nav>
 
-        {/* User & Actions */}
-        <div className="p-3 border-t border-gray-100 dark:border-white/[0.06] space-y-2">
-          <div className="flex items-center justify-between px-2">
-            {!collapsed && <span className="text-xs text-gray-500 font-medium">Theme</span>}
-            <ThemeToggle />
-          </div>
-
+        <div className="space-y-1 border-t border-line p-3">
           {!collapsed && (
-            <div className="flex items-center gap-2.5 px-3 py-2 bg-gray-50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5">
-              <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-black text-xs font-black flex-shrink-0">
-                {user?.name?.charAt(0)}
-              </div>
-              <div className="min-w-0">
-                <p className="text-gray-900 dark:text-white text-xs font-bold truncate">{user?.name}</p>
-                <p className="text-gray-500 text-[10px] truncate">{user?.email}</p>
-              </div>
+            <div className="mb-2 flex items-center gap-3 rounded-xl px-2 py-2">
+              <span className="lacquer grid h-9 w-9 flex-shrink-0 place-items-center rounded-full text-xs font-black">{user?.name?.charAt(0)}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">{user?.name}</span>
+                <span className="block truncate text-xs text-muted">{user?.email}</span>
+              </span>
             </div>
           )}
-
-          <Link
-            to="/"
-            className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-gray-600 dark:text-gray-400 hover:text-amber-500 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-          >
-            <Home className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && <span>View Main Website</span>}
+          <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between px-2'} py-1`}>
+            {!collapsed && <span className="text-xs text-muted">Theme</span>}
+            <ThemeToggle />
+          </div>
+          <Link to="/" title={collapsed ? 'View website' : undefined} className={`flex items-center gap-3 rounded-xl py-2.5 text-sm text-muted hover:bg-ink/5 hover:text-ink ${collapsed ? 'justify-center' : 'px-3.5'}`}>
+            <Home className="h-[18px] w-[18px] flex-shrink-0" />
+            {!collapsed && <span>View website</span>}
           </Link>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 text-xs font-semibold transition-colors"
-          >
-            <LogOut className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && <span>Logout</span>}
+          <button type="button" onClick={handleLogout} title={collapsed ? 'Log out' : undefined} className={`flex w-full items-center gap-3 rounded-xl py-2.5 text-sm text-danger hover:bg-danger/10 ${collapsed ? 'justify-center' : 'px-3.5'}`}>
+            <LogOut className="h-[18px] w-[18px] flex-shrink-0" />
+            {!collapsed && <span>Log out</span>}
           </button>
+        </div>
+        <div className="flex h-1.5" aria-hidden="true">
+          {PAINT_ORDER.map((t) => <span key={t} className="flex-1" style={{ background: PAINTS[t].hex }} />)}
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-gray-50 dark:bg-[#0D0D0D]">
-        <div className="p-6 sm:p-8 max-w-7xl mx-auto">
-          <Outlet />
+      <div className="min-w-0 flex-1">
+        <div className="mx-auto max-w-7xl p-5 sm:p-8">
+          <Suspense fallback={<div className="py-24"><Spinner size="lg" /></div>}>
+            <Outlet />
+          </Suspense>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

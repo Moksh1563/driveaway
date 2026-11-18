@@ -13,60 +13,61 @@ const sizeClasses = {
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }) {
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && onClose) {
-        onClose();
-      }
+    const onKey = (e) => { if (e.key === 'Escape' && onClose) onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  const modalElement = (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6">
-          {/* Backdrop click area */}
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={title || undefined}
+          className="fixed inset-0 z-[9999] overflow-y-auto p-3 sm:p-6"
+        >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0"
+            className="fixed inset-0 bg-[#0C0C0D]/70"
           />
-          {/* Centering container that respects screen boundaries */}
           <div className="flex min-h-full items-center justify-center py-4">
-            {/* Modal Box */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 15 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className={`relative z-10 w-full my-auto ${sizeClasses[size]} bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col`}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              className={`relative z-10 w-full my-auto ${sizeClasses[size]} bg-surface text-ink border border-line rounded-[22px] shadow-lift max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col`}
             >
-              {/* Header */}
               {title && (
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-white/10 flex-shrink-0">
-                  <h2 className="text-gray-900 dark:text-white font-bold text-lg">{title}</h2>
+                <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-line flex-shrink-0">
+                  <h2 className="font-wide font-black uppercase tracking-tight text-lg">{title}</h2>
                   <button
+                    type="button"
                     onClick={onClose}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                    aria-label="Close"
+                    className="w-9 h-9 grid place-items-center rounded-full border border-line hover:border-ink transition-colors"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
-              {/* Body */}
               <div className="overflow-y-auto flex-1 p-6">{children}</div>
             </motion.div>
           </div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
-
-  if (typeof document === 'undefined') return null;
-  return createPortal(modalElement, document.body);
 }

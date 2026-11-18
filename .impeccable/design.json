@@ -1,0 +1,690 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T16:39:25.882Z",
+  "title": "Design System: Driveaway",
+  "extensions": {
+    "colorMeta": {
+      "primer-ground": {
+        "role": "neutral",
+        "displayName": "Primer Ground",
+        "purpose": "Light page background and header.",
+        "canonical": "rgb(236 234 230)",
+        "oklch": "oklch(93.7% 0.006 84.6)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#272624",
+          "#464542",
+          "#686662",
+          "#8B8985",
+          "#AFAEAA",
+          "#D2D1CF",
+          "#EFEEED"
+        ]
+      },
+      "primer-surface": {
+        "role": "neutral",
+        "displayName": "Primer Surface",
+        "purpose": "Light banded sections, menus, modals.",
+        "canonical": "rgb(246 245 242)",
+        "oklch": "oklch(97.0% 0.004 91.4)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#272625",
+          "#464543",
+          "#676663",
+          "#8A8986",
+          "#AFAEAB",
+          "#D1D1CF",
+          "#EEEEEE"
+        ]
+      },
+      "primer-raised": {
+        "role": "neutral",
+        "displayName": "Primer Raised",
+        "purpose": "Light cards, fields, order slip.",
+        "canonical": "rgb(255 255 255)",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#262626",
+          "#454545",
+          "#666666",
+          "#898989",
+          "#AEAEAE",
+          "#D1D1D1",
+          "#EEEEEE"
+        ]
+      },
+      "primer-ink": {
+        "role": "neutral",
+        "displayName": "Primer Ink",
+        "purpose": "Light-theme text, ink buttons, focus rings.",
+        "canonical": "rgb(17 17 19)",
+        "oklch": "oklch(17.9% 0.004 286.0)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#262628",
+          "#454547",
+          "#666668",
+          "#89898B",
+          "#ADADB0",
+          "#D1D1D2",
+          "#EEEEEF"
+        ]
+      },
+      "primer-muted": {
+        "role": "neutral",
+        "displayName": "Primer Muted",
+        "purpose": "Light-theme secondary text and labels.",
+        "canonical": "rgb(94 91 87)",
+        "oklch": "oklch(47.3% 0.007 75.3)",
+        "tonalRamp": [
+          "#0B0B0A",
+          "#282624",
+          "#474441",
+          "#696661",
+          "#8C8984",
+          "#B1ADA9",
+          "#D2D1CE",
+          "#EFEEED"
+        ]
+      },
+      "primer-line": {
+        "role": "neutral",
+        "displayName": "Primer Line",
+        "purpose": "Light-theme hairlines.",
+        "canonical": "rgb(214 210 203)",
+        "oklch": "oklch(86.5% 0.011 81.8)",
+        "tonalRamp": [
+          "#0C0B0A",
+          "#282623",
+          "#48453F",
+          "#69665F",
+          "#8C8982",
+          "#B1ADA7",
+          "#D3D1CD",
+          "#EFEEED"
+        ]
+      },
+      "clearcoat-ground": {
+        "role": "neutral",
+        "displayName": "Clear-coat Ground",
+        "purpose": "Dark page background; also the photo scrim in both themes.",
+        "canonical": "rgb(12 12 13)",
+        "oklch": "oklch(15.5% 0.002 286.2)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#262627",
+          "#454546",
+          "#666667",
+          "#89898A",
+          "#AEAEAF",
+          "#D1D1D2",
+          "#EEEEEF"
+        ]
+      },
+      "clearcoat-surface": {
+        "role": "neutral",
+        "displayName": "Clear-coat Surface",
+        "purpose": "Dark banded sections, menus, modals.",
+        "canonical": "rgb(22 22 24)",
+        "oklch": "oklch(20.1% 0.004 286.0)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#262628",
+          "#454547",
+          "#666668",
+          "#89898B",
+          "#ADADB0",
+          "#D1D1D2",
+          "#EEEEEF"
+        ]
+      },
+      "clearcoat-raised": {
+        "role": "neutral",
+        "displayName": "Clear-coat Raised",
+        "purpose": "Dark cards and fields.",
+        "canonical": "rgb(31 31 34)",
+        "oklch": "oklch(24.1% 0.006 286.0)",
+        "tonalRamp": [
+          "#0B0B0C",
+          "#262628",
+          "#454548",
+          "#666669",
+          "#89898C",
+          "#ADADB1",
+          "#D1D1D3",
+          "#EEEEEF"
+        ]
+      },
+      "clearcoat-ink": {
+        "role": "neutral",
+        "displayName": "Clear-coat Ink",
+        "purpose": "Dark-theme text and ink buttons.",
+        "canonical": "rgb(242 240 236)",
+        "oklch": "oklch(95.6% 0.006 84.6)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#272624",
+          "#464542",
+          "#686662",
+          "#8B8985",
+          "#AFAEAA",
+          "#D2D1CF",
+          "#EFEEED"
+        ]
+      },
+      "clearcoat-muted": {
+        "role": "neutral",
+        "displayName": "Clear-coat Muted",
+        "purpose": "Dark-theme secondary text.",
+        "canonical": "rgb(162 158 152)",
+        "oklch": "oklch(70.1% 0.010 78.3)",
+        "tonalRamp": [
+          "#0C0B0A",
+          "#282623",
+          "#48443F",
+          "#696560",
+          "#8C8883",
+          "#B1ADA7",
+          "#D3D0CD",
+          "#EFEEED"
+        ]
+      },
+      "clearcoat-line": {
+        "role": "neutral",
+        "displayName": "Clear-coat Line",
+        "purpose": "Dark-theme hairlines.",
+        "canonical": "rgb(46 46 50)",
+        "oklch": "oklch(30.3% 0.007 286.0)",
+        "tonalRamp": [
+          "#0B0B0C",
+          "#262629",
+          "#444449",
+          "#65656A",
+          "#88898D",
+          "#ADADB2",
+          "#D0D1D3",
+          "#EEEEEF"
+        ]
+      },
+      "on-paint-light": {
+        "role": "neutral",
+        "displayName": "On-paint White",
+        "purpose": "Label colour on all paints except Giallo and Arancio.",
+        "canonical": "rgb(255 255 255)",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#262626",
+          "#454545",
+          "#666666",
+          "#898989",
+          "#AEAEAE",
+          "#D1D1D1",
+          "#EEEEEE"
+        ]
+      },
+      "on-paint-dark": {
+        "role": "neutral",
+        "displayName": "On-paint Ink",
+        "purpose": "Label colour on Giallo and Arancio.",
+        "canonical": "rgb(17 17 19)",
+        "oklch": "oklch(17.9% 0.004 286.0)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#262628",
+          "#454547",
+          "#666668",
+          "#89898B",
+          "#ADADB0",
+          "#D1D1D2",
+          "#EEEEEF"
+        ]
+      },
+      "paint-01-french-racing-blue": {
+        "role": "primary",
+        "displayName": "01 French Racing Blue",
+        "purpose": "Hypercar paint.",
+        "canonical": "rgb(31 60 136)",
+        "oklch": "oklch(38.2% 0.132 264.9)",
+        "tonalRamp": [
+          "#060B16",
+          "#102252",
+          "#213E8A",
+          "#4061B1",
+          "#6186D9",
+          "#85ABFF",
+          "#B9D1FF",
+          "#E6EFFF"
+        ]
+      },
+      "paint-02-rosso-corsa": {
+        "role": "primary",
+        "displayName": "02 Rosso Corsa",
+        "purpose": "Supercar paint; default paint on show.",
+        "canonical": "rgb(208 2 27)",
+        "oklch": "oklch(54.0% 0.219 26.3)",
+        "tonalRamp": [
+          "#1A0403",
+          "#5B0000",
+          "#9A0000",
+          "#C5000E",
+          "#F13A39",
+          "#FF675F",
+          "#FFB1A6",
+          "#FFE4DF"
+        ]
+      },
+      "paint-03-racing-green": {
+        "role": "primary",
+        "displayName": "03 Racing Green",
+        "purpose": "Luxury paint.",
+        "canonical": "rgb(15 77 46)",
+        "oklch": "oklch(37.3% 0.081 156.3)",
+        "tonalRamp": [
+          "#060D08",
+          "#092E1B",
+          "#155232",
+          "#3B7453",
+          "#5E9875",
+          "#83BE99",
+          "#BADAC5",
+          "#E6F2EA"
+        ]
+      },
+      "paint-04-giallo": {
+        "role": "primary",
+        "displayName": "04 Giallo",
+        "purpose": "SUV paint; ink labels.",
+        "canonical": "rgb(242 183 5)",
+        "oklch": "oklch(81.1% 0.166 85.0)",
+        "tonalRamp": [
+          "#110A00",
+          "#3F1D00",
+          "#6C3600",
+          "#905900",
+          "#B67E00",
+          "#DEA300",
+          "#EDCD89",
+          "#F9EDD6"
+        ]
+      },
+      "paint-05-voltage-teal": {
+        "role": "primary",
+        "displayName": "05 Voltage Teal",
+        "purpose": "Electric paint; darkened from the contract #0E9AAA so white labels clear 4.5:1.",
+        "canonical": "rgb(11 119 133)",
+        "oklch": "oklch(52.2% 0.088 209.4)",
+        "tonalRamp": [
+          "#030D0F",
+          "#002E36",
+          "#00515E",
+          "#017381",
+          "#3C98A6",
+          "#64BDCC",
+          "#ACDAE3",
+          "#E2F2F5"
+        ]
+      },
+      "paint-06-arancio": {
+        "role": "primary",
+        "displayName": "06 Arancio",
+        "purpose": "Sports paint; ink labels.",
+        "canonical": "rgb(232 89 12)",
+        "oklch": "oklch(64.4% 0.192 41.7)",
+        "tonalRamp": [
+          "#180501",
+          "#540000",
+          "#8F0000",
+          "#B92900",
+          "#E35400",
+          "#FF7C3E",
+          "#FFBA9A",
+          "#FFE7DB"
+        ]
+      },
+      "paint-07-graphite": {
+        "role": "primary",
+        "displayName": "07 Graphite",
+        "purpose": "Sedan paint and unknown-category fallback.",
+        "canonical": "rgb(74 78 87)",
+        "oklch": "oklch(42.4% 0.016 266.5)",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#24262C",
+          "#41454E",
+          "#62666F",
+          "#858993",
+          "#A9AEB8",
+          "#CED1D7",
+          "#EDEEF1"
+        ]
+      },
+      "paint-08-lilac": {
+        "role": "primary",
+        "displayName": "08 Lilac",
+        "purpose": "Hatchback paint.",
+        "canonical": "rgb(123 97 201)",
+        "oklch": "oklch(56.8% 0.155 292.2)",
+        "tonalRamp": [
+          "#0C0817",
+          "#2A1754",
+          "#4B2B8F",
+          "#6B50B6",
+          "#8D74DE",
+          "#B199FF",
+          "#D2C7FF",
+          "#EEEBFF"
+        ]
+      },
+      "status-ok": {
+        "role": "status",
+        "displayName": "Status OK",
+        "purpose": "Available / completed.",
+        "canonical": "rgb(30 142 78)",
+        "oklch": "oklch(57.1% 0.137 152.6)",
+        "tonalRamp": [
+          "#030E06",
+          "#00320C",
+          "#00581B",
+          "#007B3D",
+          "#37A05F",
+          "#61C783",
+          "#ABE0B9",
+          "#E2F4E6"
+        ]
+      },
+      "status-warn": {
+        "role": "status",
+        "displayName": "Status Warn",
+        "purpose": "Pending / maintenance.",
+        "canonical": "rgb(183 121 31)",
+        "oklch": "oklch(62.6% 0.125 70.4)",
+        "tonalRamp": [
+          "#120902",
+          "#3F1C00",
+          "#6D3400",
+          "#925600",
+          "#B87A21",
+          "#E09F4D",
+          "#EFCA9F",
+          "#FAECDD"
+        ]
+      },
+      "status-danger": {
+        "role": "status",
+        "displayName": "Status Danger",
+        "purpose": "Cancelled and destructive actions.",
+        "canonical": "rgb(200 30 30)",
+        "oklch": "oklch(53.5% 0.203 27.6)",
+        "tonalRamp": [
+          "#190403",
+          "#580000",
+          "#940000",
+          "#BF0E14",
+          "#EA463D",
+          "#FF7062",
+          "#FFB4A8",
+          "#FFE5E0"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero headline (fit-to-line, max 5rem) and page heads (clamp(2.8rem, 6.5vw, 6rem)); 125% width, uppercase."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings; 2.25rem mobile, 3rem from 640px."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Car names, step and modal titles, prices; 17px to 1.5rem."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text; lead copy at 1.125rem."
+      },
+      "label": {
+        "displayName": "Code label",
+        "purpose": "Paint codes, field and spec labels, badges; 11-13px, never below 11px."
+      }
+    },
+    "shadows": [
+      {
+        "name": "soft",
+        "value": "0 8px 24px -12px rgb(0 0 0 / 0.25)",
+        "purpose": "Scrolled header, paint tags on photos, paint button hover."
+      },
+      {
+        "name": "lift",
+        "value": "0 24px 60px -24px rgb(0 0 0 / 0.45)",
+        "purpose": "Card hover, order slip, hero frame, menus, modals."
+      },
+      {
+        "name": "chip",
+        "value": "0 1px 0 rgb(255 255 255 / 0.18) inset, 0 18px 40px -18px rgb(0 0 0 / 0.55)",
+        "purpose": "Swatch chips and painted panels; the inset line is the clear coat catching light."
+      },
+      {
+        "name": "lacquer-highlight",
+        "value": "linear-gradient(118deg, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 28%, transparent 46%), linear-gradient(to bottom, transparent 70%, rgb(0 0 0 / 0.12))",
+        "purpose": "Background overlay (not a box-shadow) that turns a flat paint into lacquer."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "House easing for wipes, chips, menus and modals."
+      },
+      {
+        "name": "paint-wipe",
+        "value": "650ms cubic-bezier(0.16, 1, 0.3, 1); clip-path circle 0% to 150% centred at the pressed chip x on the bottom edge",
+        "purpose": "Repaint of the hero field when a swatch is chosen (contract said ~500ms; the build ships 650ms)."
+      },
+      {
+        "name": "headline-swap",
+        "value": "350ms; in from y 18px, out to y -12px, fade",
+        "purpose": "Hero headline cross-fade on repaint."
+      },
+      {
+        "name": "button",
+        "value": "200ms ease-out; active scale 0.98",
+        "purpose": "Button colour, shadow and press."
+      },
+      {
+        "name": "card-lift",
+        "value": "300ms ease-out; translateY(-4px)",
+        "purpose": "Card hover and focus lift."
+      },
+      {
+        "name": "card-fill",
+        "value": "500ms ease-out; scaleX 0 to 1 from the left",
+        "purpose": "Card footer row filling with paint."
+      },
+      {
+        "name": "photo-zoom",
+        "value": "700ms ease-out; scale 1.04",
+        "purpose": "Card photo on hover."
+      },
+      {
+        "name": "modal",
+        "value": "280ms cubic-bezier(0.16, 1, 0.3, 1); y 24px to 0, fade",
+        "purpose": "Modal entrance."
+      },
+      {
+        "name": "theme-switch",
+        "value": "220ms ease on background, border, colour and fill",
+        "purpose": "Light/dark toggle."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "all durations 0.01ms",
+        "purpose": "prefers-reduced-motion: the paint swaps instantly."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Ink Button",
+      "kind": "button",
+      "refersTo": "button-ink",
+      "description": "Default action: ink pill on primer or clear coat.",
+      "html": "<button class=\"ds-btn-ink\">Find supercars <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-ink { font-family: Archivo, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9999px; font-weight: 600; font-size: 14px; padding: 12px 20px; border: 1px solid transparent; cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out, transform 200ms ease-out; background: rgb(var(--ink, 17 17 19)); color: rgb(var(--ground, 236 234 230)); } .ds-btn-ink:hover { background: rgb(var(--ink, 17 17 19) / 0.85); } .ds-btn-ink:focus-visible { outline: 2px solid rgb(var(--ink, 17 17 19)); outline-offset: 3px; } .ds-btn-ink:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Paint Button",
+      "kind": "button",
+      "refersTo": "button-paint",
+      "description": "The single booking-commit action, in the paint on show.",
+      "html": "<button class=\"ds-btn-paint\">Book this car</button>",
+      "css": ".ds-btn-paint { font-family: Archivo, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9999px; font-weight: 600; font-size: 14px; padding: 12px 20px; border: 1px solid transparent; cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out, transform 200ms ease-out; font-size: 16px; padding: 16px 32px; background: rgb(var(--paint, 208 2 27)); color: rgb(var(--on-paint, 255 255 255)); } .ds-btn-paint:hover { filter: brightness(1.1); box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.25); } .ds-btn-paint:focus-visible { outline: 2px solid rgb(var(--ink, 17 17 19)); outline-offset: 3px; } .ds-btn-paint:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Line Button",
+      "kind": "button",
+      "refersTo": "button-line",
+      "description": "Secondary actions and section-head links.",
+      "html": "<button class=\"ds-btn-line\">All supercars <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-line { font-family: Archivo, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9999px; font-weight: 600; font-size: 14px; padding: 12px 20px; border: 1px solid transparent; cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out, transform 200ms ease-out; background: transparent; color: rgb(var(--ink, 17 17 19)); border-color: rgb(var(--line, 214 210 203)); } .ds-btn-line:hover { border-color: rgb(var(--ink, 17 17 19)); } .ds-btn-line:focus-visible { outline: 2px solid rgb(var(--ink, 17 17 19)); outline-offset: 3px; } .ds-btn-line:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Tertiary actions such as Log in.",
+      "html": "<button class=\"ds-btn-ghost\">Log in</button>",
+      "css": ".ds-btn-ghost { font-family: Archivo, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9999px; font-weight: 600; font-size: 14px; padding: 12px 20px; border: 1px solid transparent; cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out, transform 200ms ease-out; background: transparent; color: rgb(var(--ink, 17 17 19)); } .ds-btn-ghost:hover { background: rgb(var(--ink, 17 17 19) / 0.05); } .ds-btn-ghost:focus-visible { outline: 2px solid rgb(var(--ink, 17 17 19)); outline-offset: 3px; } .ds-btn-ghost:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Text, date and select input with a condensed label above.",
+      "html": "<label class=\"ds-field-wrap\"><span class=\"ds-field-label\">Pickup hub</span><input class=\"ds-field\" placeholder=\"SG Highway\" /></label>",
+      "css": ".ds-field-wrap { display: block; font-family: Archivo, system-ui, sans-serif; } .ds-field-label { display: block; margin-bottom: 6px; font-size: 12px; color: rgb(var(--muted, 94 91 87)); font-stretch: 62%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; } .ds-field { font-family: Archivo, system-ui, sans-serif; width: 100%; border-radius: 12px; border: 1px solid rgb(var(--line, 214 210 203)); background: rgb(var(--raised, 255 255 255)); padding: 12px 16px; font-size: 14px; color: rgb(var(--ink, 17 17 19)); caret-color: rgb(var(--paint, 208 2 27)); outline: none; transition: border-color 150ms; } .ds-field::placeholder { color: rgb(var(--muted, 94 91 87) / 0.7); } .ds-field:focus, .ds-field:focus-visible { border-color: rgb(var(--ink, 17 17 19)); }"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Fixed 72px header; the active link carries a 3px paint bar.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-logo\">Driveaway</span><a class=\"ds-nav-link is-active\" href=\"#\">Home</a><a class=\"ds-nav-link\" href=\"#\">Fleet</a><a class=\"ds-nav-link\" href=\"#\">About</a><a class=\"ds-nav-link\" href=\"#\">Contact</a></nav>",
+      "css": ".ds-nav { font-family: Archivo, system-ui, sans-serif; display: flex; align-items: center; gap: 28px; height: 72px; padding: 0 24px; background: rgb(var(--ground, 236 234 230)); border-bottom: 1px solid rgb(var(--line, 214 210 203)); } .ds-nav-logo { font-stretch: 125%; font-weight: 900; text-transform: uppercase; margin-right: auto; color: rgb(var(--ink, 17 17 19)); } .ds-nav-link { position: relative; padding: 8px 4px; font-size: 14px; font-weight: 600; color: rgb(var(--muted, 94 91 87)); text-decoration: none; transition: color 150ms; } .ds-nav-link:hover, .ds-nav-link.is-active { color: rgb(var(--ink, 17 17 19)); } .ds-nav-link.is-active::after { content: ''; position: absolute; left: 4px; right: 4px; bottom: -2px; height: 3px; border-radius: 9999px; background: rgb(var(--paint, 208 2 27)); } .ds-nav-link:focus-visible { outline: 2px solid rgb(var(--ink, 17 17 19)); outline-offset: 3px; border-radius: 6px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Booking or fleet status as dot plus condensed label.",
+      "html": "<span class=\"ds-status\"><i></i>Pending</span>",
+      "css": ".ds-status { font-family: Archivo, system-ui, sans-serif; display: inline-flex; align-items: center; gap: 6px; border-radius: 9999px; padding: 4px 10px; font-size: 11px; font-stretch: 62%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; background: rgb(var(--ink, 17 17 19) / 0.06); color: #B7791F; } .ds-status i { width: 6px; height: 6px; border-radius: 9999px; background: #B7791F; }"
+    },
+    {
+      "name": "Paint Tag",
+      "kind": "chip",
+      "refersTo": "paint-tag",
+      "description": "Lacquer tag naming a car's paint number and category.",
+      "html": "<span class=\"ds-paint-tag\">02 · Supercar</span>",
+      "css": ".ds-paint-tag { font-family: Archivo, system-ui, sans-serif; position: relative; isolation: isolate; display: inline-block; border-radius: 8px; padding: 6px 10px; font-size: 11px; font-stretch: 62%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; background: rgb(var(--paint, 208 2 27)); color: rgb(var(--on-paint, 255 255 255)); box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.25); } .ds-paint-tag::after { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; background: linear-gradient(118deg, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 28%, transparent 46%), linear-gradient(to bottom, transparent 70%, rgb(0 0 0 / 0.12)); }"
+    },
+    {
+      "name": "Car Card",
+      "kind": "card",
+      "refersTo": "car-card",
+      "description": "Fleet card: photo, paint tag, name, price; the footer row fills with paint on hover.",
+      "html": "<a class=\"ds-card\" href=\"#\"><div class=\"ds-card-photo\"><span class=\"ds-card-tag\">02 · Supercar</span></div><div class=\"ds-card-body\"><h3>Ferrari SF90</h3><div class=\"ds-card-row\"><span class=\"ds-card-co\">Ferrari</span><span class=\"ds-card-price\">₹1,85,000<small>/day</small></span></div><p class=\"ds-card-specs\">2 seats · Hybrid · Automatic</p><span class=\"ds-card-cta\"><span class=\"ds-card-fill\"></span><span class=\"ds-card-cta-t\">View and book <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></span></span></div></a>",
+      "css": ".ds-card { font-family: Archivo, system-ui, sans-serif; display: flex; flex-direction: column; width: 300px; overflow: hidden; border-radius: 18px; border: 1px solid rgb(var(--line, 214 210 203)); background: rgb(var(--raised, 255 255 255)); color: rgb(var(--ink, 17 17 19)); text-decoration: none; transition: transform 300ms ease-out, box-shadow 300ms ease-out; } .ds-card:hover, .ds-card:focus-visible { transform: translateY(-4px); box-shadow: 0 24px 60px -24px rgb(0 0 0 / 0.45); } .ds-card:focus-visible { outline: 2px solid rgb(var(--ink, 17 17 19)); outline-offset: 3px; } .ds-card-photo { position: relative; aspect-ratio: 16/10; background: #4A4E57; } .ds-card-tag { position: absolute; left: 12px; top: 12px; border-radius: 8px; padding: 6px 10px; font-size: 11px; font-stretch: 62%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; background: rgb(var(--paint, 208 2 27)); color: rgb(var(--on-paint, 255 255 255)); } .ds-card-body { padding: 20px; } .ds-card-body h3 { margin: 0; font-stretch: 125%; font-weight: 900; text-transform: uppercase; font-size: 17px; line-height: 1.05; letter-spacing: -0.025em; } .ds-card-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; } .ds-card-co { font-size: 11px; font-stretch: 62%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: rgb(var(--muted, 94 91 87)); } .ds-card-price { font-stretch: 125%; font-weight: 900; font-size: 18px; } .ds-card-price small { margin-left: 4px; font-size: 12px; font-weight: 400; font-stretch: 100%; color: rgb(var(--muted, 94 91 87)); } .ds-card-specs { margin: 16px 0 20px; font-size: 13px; color: rgb(var(--muted, 94 91 87)); } .ds-card-cta { position: relative; display: block; overflow: hidden; border-radius: 12px; border: 1px solid rgb(var(--line, 214 210 203)); } .ds-card-fill { position: absolute; inset: 0; background: rgb(var(--paint, 208 2 27)); transform: scaleX(0); transform-origin: left; transition: transform 500ms ease-out; } .ds-card-cta-t { position: relative; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; font-size: 14px; font-weight: 600; transition: color 300ms; } .ds-card:hover .ds-card-fill, .ds-card:focus-visible .ds-card-fill { transform: scaleX(1); } .ds-card:hover .ds-card-cta-t, .ds-card:focus-visible .ds-card-cta-t { color: rgb(var(--on-paint, 255 255 255)); }"
+    },
+    {
+      "name": "Swatch Chip",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Signature lacquer chip from the hero swatch fan; choosing one repaints the field. The unlit variant marks unavailable cars.",
+      "html": "<div class=\"ds-fan\"><button class=\"ds-swatch is-active\" style=\"--paint: 208 2 27; --on-paint: 255 255 255\"><span class=\"ds-swatch-no\">Paint 02</span><span class=\"ds-swatch-name\">Supercar</span></button><button class=\"ds-swatch\" style=\"--paint: 31 60 136; --on-paint: 255 255 255\"><span class=\"ds-swatch-no\">Paint 01</span><span class=\"ds-swatch-name\">Hypercar</span></button><button class=\"ds-swatch is-unlit\" style=\"--paint: 242 183 5; --on-paint: 17 17 19\"><span class=\"ds-swatch-no\">Paint 04</span><span class=\"ds-swatch-name\">SUV</span></button></div>",
+      "css": ".ds-fan { display: flex; align-items: flex-end; } .ds-swatch { font-family: Archivo, system-ui, sans-serif; position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: space-between; width: 150px; height: 112px; padding: 14px 16px 24px 20px; text-align: left; border: 1px solid rgb(255 255 255 / 0.25); border-bottom: 0; border-radius: 18px 18px 0 0; background: rgb(var(--paint)); color: rgb(var(--on-paint)); box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 18px 40px -18px rgb(0 0 0 / 0.55); cursor: pointer; transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-swatch::after { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; background: linear-gradient(118deg, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 28%, transparent 46%), linear-gradient(to bottom, transparent 70%, rgb(0 0 0 / 0.12)); } .ds-swatch:hover, .ds-swatch.is-active { transform: translateY(-16px); } .ds-swatch.is-active::before { content: ''; position: absolute; right: 14px; top: 14px; width: 10px; height: 10px; border-radius: 9999px; background: rgb(var(--on-paint)); } .ds-swatch:focus-visible { outline: 2px solid rgb(var(--on-paint)); outline-offset: 3px; } .ds-swatch.is-unlit { filter: saturate(0.15) brightness(0.92); } .ds-swatch.is-unlit::after { background: none; } .ds-swatch-no { font-size: 11px; font-stretch: 62%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; } .ds-swatch-name { font-stretch: 125%; font-weight: 900; text-transform: uppercase; font-size: 17px; line-height: 1; letter-spacing: -0.025em; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Paint Book",
+    "overview": "Driveaway is a factory swatch book that happens to rent cars. Every car category owns one paint, and any region of the page that is about a category wears that paint as a full lacquered field. Everything else, the chrome, the navigation, the forms, the tables, stays in neutral primer (light theme) or clear coat (dark theme) and plain ink, so the paint is the only colour you notice.\n\nDensity is moderate and editorial: wide uppercase display type, generous section rhythm (80–96px), one 1280px container. Chroma is spent in large, deliberate blocks (hero fields, swatch chips, the closing hub band) rather than sprinkled as accents. The signature interaction is the repaint: choosing a swatch wipes the new paint across the field from the chip that was pressed.\n\nThe system rejects the exotic-rental default of a dark photo hero, a gold call-to-action and a grid of equal cards. The old amber accent is retired and does not come back.",
+    "keyCharacteristics": [
+      "Neutral primer/clear-coat chrome; all chroma comes from eight category paints.",
+      "Paint applied as lacquer: a solid field with a soft clear-coat highlight sweep.",
+      "One family, Archivo, with its width axis doing the voice work (125% display, 62% codes, 100% body).",
+      "Ink pill buttons; one paint-coloured action per screen at most.",
+      "Unavailable cars shown matte and desaturated (\"unlit\"), never hidden.",
+      "18px chip corners with an occasional oversized bottom-left corner on signature panels."
+    ],
+    "rules": [
+      {
+        "name": "The Paint Owns Chroma Rule",
+        "body": "Chrome is neutral ink on primer or clear coat. The only saturated colour on a screen is a category paint (plus status dots). If a new element wants colour, it takes the paint of the category it belongs to, or it stays ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The On-Colour Rule",
+        "body": "Text on a paint always uses that paint's paired on-colour: Giallo and Arancio take ink (#111113); every other paint takes white. A new or adjusted paint must reach 4.5:1 against its on-colour before it ships.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Paint Per Region Rule",
+        "body": "A region declares its paint once at its root; descendants read the paint and on-paint tokens. Never hard-code a paint hex into a child of a painted region.",
+        "section": "colors"
+      },
+      {
+        "name": "The Width Axis Rule",
+        "body": "Voice changes by width, not by family. Display and titles are 125% black uppercase; codes and labels are 62% bold tracked uppercase; reading text is 100%. No second typeface.",
+        "section": "typography"
+      },
+      {
+        "name": "The Fit-the-Line Rule",
+        "body": "The hero headline is sized from its own character count against the container width, never larger than 5rem, so a long category name (\"Hatchbacks, in Lilac.\") never breaks mid-word or overflows.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat at Rest Rule",
+        "body": "Cards and lists sit flat with a 1px line border. They lift (translate up 4px, Lift shadow) only on hover or keyboard focus.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** let a category's paint flood whole regions (hero, page head, a closing band) as lacquer, and keep everything else neutral ink.",
+      "**Do** pair every paint with its on-colour: ink #111113 on Giallo and Arancio, white on the rest.",
+      "**Do** use Archivo's width axis for hierarchy: 125% black uppercase display, 62% tracked uppercase labels at 11px minimum, 100% body.",
+      "**Do** use ink pills for actions and save the paint button for the one booking commit on a screen.",
+      "**Do** show unavailable cars unlit with their status, and offer the notify action instead of hiding them.",
+      "**Do** keep 18px chip corners on cards and chips, and reserve the oversized bottom-left corner for signature paint panels.",
+      "**Do** honour reduced motion: the wipe and every transition collapse to an instant change."
+    ],
+    "donts": [
+      "**Don't** reintroduce a gold or amber accent, a dark-photo hero with a gold button, or a grid of identical dark cards.",
+      "**Don't** add accent colours outside the eight paints and three status colours.",
+      "**Don't** fill chrome (navigation, forms, tables, admin panels) with paint; paint there is limited to the avatar, the active-link bar and category tags.",
+      "**Don't** set label text below 11px or use a second typeface.",
+      "**Don't** use colour or a shadow to show resting state; cards are flat until hovered or focused."
+    ]
+  }
+}

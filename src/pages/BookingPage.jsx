@@ -11,20 +11,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { MapPin, Calendar, ChevronRight, ChevronLeft, Tag, Gift, CreditCard, Info, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import PageWrapper from '../components/layout/PageWrapper';
 import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import RazorpayModal from '../components/payment/RazorpayModal';
+import { sizedImage, handleImageError } from '../utils/image';
+import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
+import { HUBS } from '../theme/hubs';
 
-const LOCATIONS = ['SG Highway', 'Vastrapur', 'Bopal', 'Ashram Road', 'Ahmedabad Airport', 'BRTS Bus Stand', 'Navrangpura', 'Satellite'];
+const LOCATIONS = HUBS;
 const PAYMENT_METHODS = [
-  { id: 'Razorpay', label: 'Razorpay', sublabel: 'UPI (GPay, PhonePe), Cards & NetBanking', badge: 'Fastest & Recommended' },
-  { id: 'Cash', label: 'Pay at Pickup (Cash)', sublabel: 'Pay at the counter when collecting vehicle', badge: 'Pay Later' },
+  { id: 'Razorpay', label: 'Pay online now', sublabel: 'UPI, cards, net banking or wallets. Confirmed instantly.' },
+  { id: 'Cash', label: 'Pay at pickup', sublabel: 'Pay in cash at the hub when you collect the car.' },
 ];
 
 export default function BookingPage() {
@@ -39,10 +40,13 @@ export default function BookingPage() {
   const [discountLoading, setDiscountLoading] = useState(false);
   const [discountInfo, setDiscountInfo] = useState(null);
 
+  const trip = (() => {
+    try { return JSON.parse(sessionStorage.getItem('driveaway_trip') || '{}'); } catch { return {}; }
+  })();
   const [form, setForm] = useState({
-    pickupDate: '',
-    returnDate: '',
-    pickupLocation: '',
+    pickupDate: trip.from || '',
+    returnDate: trip.to || '',
+    pickupLocation: HUBS.includes(trip.location) ? trip.location : '',
     paymentMethod: 'Razorpay',
     discountCode: '',
     useLoyaltyPoints: false,
@@ -92,7 +96,7 @@ export default function BookingPage() {
     try {
       const { data } = await api.post('/discount/validate', { code: form.discountCode });
       setDiscountInfo(data);
-      toast.success(`Discount applied! ${data.percentageOff}% off`);
+      toast.success(`${data.percentageOff}% off applied`);
     } catch (err) {
       setDiscountInfo(null);
       toast.error(err.response?.data?.message || 'Invalid discount code');
@@ -132,7 +136,7 @@ export default function BookingPage() {
         ...extraPaymentDetails,
       };
       const { data } = await api.post('/bookings', payload);
-      toast.success('Booking confirmed! 🎉');
+      toast.success('Booking confirmed');
       navigate(`/booking-success/${data._id}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Booking failed. Please try again.');
@@ -144,7 +148,7 @@ export default function BookingPage() {
 
   const validateStep1 = () => {
     if (!form.pickupDate || !form.returnDate || !form.pickupLocation) {
-      toast.error('Please fill in all trip details');
+      toast.error('Choose a pickup hub and both dates');
       return false;
     }
     if (new Date(form.pickupDate) < new Date(new Date().setHours(0,0,0,0))) {
@@ -164,354 +168,241 @@ export default function BookingPage() {
 
   const validateStep2 = () => {
     if (!form.customerName || !form.customerPhone || !form.licenseNumber) {
-      toast.error('Please fill in all required driver details');
+      toast.error('Add the driver name, phone and licence number');
       return false;
     }
     return true;
   };
 
-  const inputClass = 'w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl px-4 py-3 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none placeholder-gray-400 dark:placeholder-gray-500 shadow-xs transition-all';
-  const labelClass = 'block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5';
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <div className="grid min-h-screen place-items-center pt-[72px]"><Spinner size="lg" /></div>;
   }
 
-  const STEPS = ['Trip Details', 'Driver Info', 'Confirm'];
+  const STEPS = ['Trip', 'Driver', 'Confirm'];
+  const paint = paintFor(car.type);
+  const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
+  const today = new Date().toISOString().split('T')[0];
+  const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <PageWrapper>
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0D] text-gray-900 dark:text-white pt-20 pb-16 transition-colors">
-        <div className="max-w-4xl mx-auto px-4">
-
-          {/* Step Indicator */}
-          <div className="flex items-center justify-center gap-2 mb-8 mt-4 flex-wrap">
-            {STEPS.map((s, i) => (
-              <React.Fragment key={s}>
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all ${
-                  step === i + 1
-                    ? 'bg-amber-500 text-black shadow-md'
-                    : step > i + 1
-                    ? 'bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/30'
-                    : 'bg-white dark:bg-white/5 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-white/10'
-                }`}>
-                  <span className="w-5 h-5 flex items-center justify-center rounded-full bg-current/20 text-xs">
-                    {step > i + 1 ? <Check className="w-3 h-3" /> : i + 1}
-                  </span>
-                  {s}
-                </div>
-                {i < STEPS.length - 1 && <ChevronRight className="w-4 h-4 text-gray-400" />}
-              </React.Fragment>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Form */}
-            <div className="lg:col-span-2">
-              <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 sm:p-8 shadow-sm">
-
-                {/* STEP 1: Trip Details */}
-                {step === 1 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-                    <h2 className="text-gray-900 dark:text-white text-xl font-bold">1. Select Trip Details</h2>
-                    <div>
-                      <label className={labelClass}>Pickup Location *</label>
-                      <select
-                        value={form.pickupLocation}
-                        onChange={e => setForm(p => ({ ...p, pickupLocation: e.target.value }))}
-                        className={inputClass}
-                      >
-                        <option value="" className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">Select Ahmedabad pickup location</option>
-                        {LOCATIONS.map(l => <option key={l} value={l} className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">{l}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Pickup Date *</label>
-                        <input
-                          type="date"
-                          value={form.pickupDate}
-                          min={new Date().toISOString().split('T')[0]}
-                          onChange={e => setForm(p => ({ ...p, pickupDate: e.target.value }))}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Return Date *</label>
-                        <input
-                          type="date"
-                          value={form.returnDate}
-                          min={form.pickupDate || new Date().toISOString().split('T')[0]}
-                          onChange={e => setForm(p => ({ ...p, returnDate: e.target.value }))}
-                          className={inputClass}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Discount Code */}
-                    <div className="pt-2 border-t border-gray-100 dark:border-white/5">
-                      <label className={labelClass}><Tag className="inline w-3 h-3 mr-1 text-amber-500" />Discount Code</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="e.g. DRIVEAWAY20"
-                          value={form.discountCode}
-                          onChange={e => setForm(p => ({ ...p, discountCode: e.target.value.toUpperCase() }))}
-                          className={`${inputClass} flex-1`}
-                        />
-                        <Button variant="secondary" size="md" onClick={handleApplyDiscount} loading={discountLoading} className="flex-shrink-0">
-                          Apply
-                        </Button>
-                      </div>
-                      {discountInfo && (
-                        <p className="text-green-600 dark:text-green-400 text-xs font-semibold mt-1">
-                          ✓ {discountInfo.percentageOff}% off applied (max ₹{discountInfo.maxDiscount?.toLocaleString('en-IN')})
-                        </p>
-                      )}
-                      <p className="text-gray-500 text-xs mt-1">Available codes: DRIVEAWAY20, NEWUSER10, AHMEDABAD15</p>
-                    </div>
-
-                    {/* Loyalty Points */}
-                    {user && user.loyaltyPoints > 0 && (
-                      <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
-                        <label className="flex items-center gap-3 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={form.useLoyaltyPoints}
-                            onChange={e => setForm(p => ({ ...p, useLoyaltyPoints: e.target.checked }))}
-                            className="w-4 h-4 accent-amber-500 rounded"
-                          />
-                          <div>
-                            <div className="flex items-center gap-2 text-gray-900 dark:text-white text-sm font-bold">
-                              <Gift className="w-4 h-4 text-amber-500" />
-                              Redeem Loyalty Points ({user.loyaltyPoints} pts available)
-                            </div>
-                            <div className="text-gray-600 dark:text-gray-400 text-xs mt-0.5">
-                              Save ₹{(user.loyaltyPoints / 10).toFixed(0)} discount (10 pts = ₹1 off)
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Payment Method */}
-                    <div className="pt-2 border-t border-gray-100 dark:border-white/5 space-y-2">
-                      <label className={labelClass}><CreditCard className="inline w-3 h-3 mr-1 text-amber-500" />Payment Method</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {PAYMENT_METHODS.map(m => (
-                          <div
-                            key={m.id}
-                            onClick={() => setForm(p => ({ ...p, paymentMethod: m.id }))}
-                            className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                              form.paymentMethod === m.id
-                                ? 'bg-amber-500/10 border-amber-500 text-gray-900 dark:text-white shadow-sm ring-1 ring-amber-500'
-                                : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-white/20'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-extrabold text-xs">{m.label}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                                m.id === 'Razorpay'
-                                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-                                  : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-400'
-                              }`}>
-                                {m.badge}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
-                              {m.sublabel}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <Button onClick={() => validateStep1() && setStep(2)} className="w-full font-bold mt-2" size="lg">
-                      Continue to Driver Info <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </motion.div>
-                )}
-
-                {/* STEP 2: Driver Details */}
-                {step === 2 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                    <h2 className="text-gray-900 dark:text-white text-xl font-bold">2. Driver & Verification Details</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Full Name *</label>
-                        <input value={form.customerName} onChange={e => setForm(p => ({ ...p, customerName: e.target.value }))} className={inputClass} placeholder="Driver name" />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Phone *</label>
-                        <input value={form.customerPhone} onChange={e => setForm(p => ({ ...p, customerPhone: e.target.value }))} className={inputClass} placeholder="9999999999" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Email Address</label>
-                      <input value={form.customerEmail} onChange={e => setForm(p => ({ ...p, customerEmail: e.target.value }))} className={inputClass} placeholder="you@email.com" />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Driving License Number *</label>
-                        <input value={form.licenseNumber} onChange={e => setForm(p => ({ ...p, licenseNumber: e.target.value }))} className={inputClass} placeholder="GJ01-2020-XXXX" />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Date of Birth</label>
-                        <input type="date" value={form.dateOfBirth} onChange={e => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} className={inputClass} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Address (Ahmedabad / Local)</label>
-                      <input value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} className={inputClass} placeholder="Street, Area, City" />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>ID Proof Type</label>
-                        <select value={form.idProofType} onChange={e => setForm(p => ({ ...p, idProofType: e.target.value }))} className={inputClass}>
-                          <option value="" className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">Select ID</option>
-                          {['Aadhaar Card', 'PAN Card', 'Passport', 'Voter ID'].map(t => <option key={t} value={t} className="bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white">{t}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={labelClass}>ID Number</label>
-                        <input value={form.idProofNumber} onChange={e => setForm(p => ({ ...p, idProofNumber: e.target.value }))} className={inputClass} placeholder="XXXX XXXX XXXX" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Emergency Contact Name</label>
-                        <input value={form.emergencyContact} onChange={e => setForm(p => ({ ...p, emergencyContact: e.target.value }))} className={inputClass} placeholder="Contact person" />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Emergency Phone</label>
-                        <input value={form.emergencyPhone} onChange={e => setForm(p => ({ ...p, emergencyPhone: e.target.value }))} className={inputClass} placeholder="9876543210" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Special Requests</label>
-                      <textarea value={form.specialRequirements} onChange={e => setForm(p => ({ ...p, specialRequirements: e.target.value }))} className={`${inputClass} h-20 resize-none`} placeholder="e.g. Airport terminal meetup, extra luggage space..." />
-                    </div>
-
-                    <div className="flex gap-3 pt-2">
-                      <Button variant="ghost" onClick={() => setStep(1)} className="flex-1">
-                        <ChevronLeft className="w-4 h-4" /> Back
-                      </Button>
-                      <Button onClick={() => validateStep2() && setStep(3)} className="flex-1 font-bold">
-                        Review Booking <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* STEP 3: Confirm */}
-                {step === 3 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-                    <h2 className="text-gray-900 dark:text-white text-xl font-bold">3. Review & Confirm Booking</h2>
-                    <div className="space-y-2.5 bg-gray-50 dark:bg-white/[0.03] p-4 rounded-xl border border-gray-200 dark:border-white/5">
-                      {[
-                        ['Car Selected', `${car.name} (${car.company})`],
-                        ['Pickup Location', form.pickupLocation],
-                        ['Trip Duration', `${new Date(form.pickupDate).toLocaleDateString('en-IN')} → ${new Date(form.returnDate).toLocaleDateString('en-IN')} (${totalDays} Day${totalDays > 1 ? 's' : ''})`],
-                        ['Payment Option', form.paymentMethod === 'Cash' ? 'Cash on Pickup' : 'Razorpay (Instant Online)'],
-                        ['Driver Name', form.customerName],
-                        ['Driver License', form.licenseNumber],
-                        ['Contact Phone', form.customerPhone],
-                      ].map(([key, val]) => (
-                        <div key={key} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500 dark:text-gray-400">{key}</span>
-                          <span className="text-gray-900 dark:text-white font-bold">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-gray-200 dark:border-white/10 pt-4 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Base Price ({totalDays} days × ₹{car.dailyRate.toLocaleString('en-IN')})</span>
-                        <span className="text-gray-900 dark:text-white font-semibold">₹{baseAmount.toLocaleString('en-IN')}</span>
-                      </div>
-                      {discountAmount > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-green-600 dark:text-green-400">Discount ({discountInfo?.percentageOff}%)</span>
-                          <span className="text-green-600 dark:text-green-400 font-semibold">-₹{Math.round(discountAmount).toLocaleString('en-IN')}</span>
-                        </div>
-                      )}
-                      {loyaltyDiscount > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-green-600 dark:text-green-400">Loyalty Discount</span>
-                          <span className="text-green-600 dark:text-green-400 font-semibold">-₹{Math.round(loyaltyDiscount).toLocaleString('en-IN')}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center font-extrabold text-xl pt-3 border-t border-gray-200 dark:border-white/10">
-                        <span className="text-gray-900 dark:text-white">Final Amount</span>
-                        <span className="text-amber-500">₹{Math.round(totalAmount).toLocaleString('en-IN')}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-2.5 bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 rounded-xl p-3.5">
-                      <Info className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-gray-700 dark:text-gray-300 text-xs leading-relaxed">
-                        You'll earn <strong>{Math.floor(totalAmount / 100)} loyalty points</strong> with this trip. Instant confirmation & invoice will be generated.
-                      </p>
-                    </div>
-
-                    <div className="flex gap-3 pt-2">
-                      <Button variant="ghost" onClick={() => setStep(2)} className="flex-1">
-                        <ChevronLeft className="w-4 h-4" /> Back
-                      </Button>
-                      <Button onClick={handleSubmit} loading={submitting} className="flex-1 font-extrabold shadow-lg shadow-amber-500/25" size="lg">
-                        {form.paymentMethod === 'Cash'
-                          ? 'Confirm & Reserve (Pay at Pickup) 🚗'
-                          : `Pay ₹${Math.round(totalAmount).toLocaleString('en-IN')} with Razorpay ⚡`}
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            </div>
-
-            {/* Car Summary Sidebar */}
+    <div className="pt-[72px]" style={paintStyle(car.type)}>
+      {/* Head: the car in its paint, with the step rail */}
+      <section className="lacquer on-paint">
+        <div className="page-container py-10">
+          <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <div className="bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden sticky top-24 shadow-sm">
-                <img src={car.images?.main} alt={car.name} className="w-full h-36 object-cover bg-gray-100 dark:bg-gray-800" />
-                <div className="p-5 space-y-3">
-                  <div>
-                    <h3 className="text-gray-900 dark:text-white font-extrabold text-base">{car.name}</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{car.company} • {car.type}</p>
-                  </div>
-                  <div className="border-t border-gray-100 dark:border-white/5 pt-3 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500 dark:text-gray-400">Daily Rate</span>
-                      <span className="text-gray-900 dark:text-white font-bold">₹{car.dailyRate.toLocaleString('en-IN')}</span>
-                    </div>
-                    {totalDays > 0 && (
-                      <>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500 dark:text-gray-400">Duration</span>
-                          <span className="text-gray-900 dark:text-white font-bold">{totalDays} Day{totalDays > 1 ? 's' : ''}</span>
-                        </div>
-                        <div className="flex justify-between items-center font-extrabold pt-2 border-t border-gray-100 dark:border-white/5">
-                          <span className="text-gray-900 dark:text-white">Est. Total</span>
-                          <span className="text-amber-500 text-lg">₹{Math.round(totalAmount).toLocaleString('en-IN')}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <h1 className="display text-[clamp(2.2rem,5vw,4rem)]">Book the {car.name}</h1>
+              <p className="mt-3 code-label text-[13px]">{car.company} · Paint {paint.no} {paint.name} · {rupees(car.dailyRate)} a day</p>
             </div>
+            <ol className="flex items-center gap-2" aria-label="Booking steps">
+              {STEPS.map((s, i) => {
+                const n = i + 1;
+                const state = step === n ? 'current' : step > n ? 'done' : 'todo';
+                return (
+                  <li key={s} aria-current={state === 'current' ? 'step' : undefined}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                      state === 'current' ? 'bg-on-paint text-paint' : state === 'done' ? 'bg-on-paint/20' : 'border border-on-paint/30 opacity-75'
+                    }`}>
+                    {state === 'done' ? <Check className="h-4 w-4" /> : <span className="font-wide font-black">{n}</span>}
+                    {s}
+                  </li>
+                );
+              })}
+            </ol>
           </div>
         </div>
+      </section>
+
+      <div className="page-container grid gap-10 py-10 lg:grid-cols-12">
+        <div className="min-w-0 lg:col-span-8">
+          {step === 1 && (
+            <div className="space-y-10">
+              <fieldset>
+                <legend className="font-wide font-black uppercase tracking-tight text-xl">Where and when</legend>
+                <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                  <label className="block sm:col-span-3">
+                    <span className="field-label">Pickup hub *</span>
+                    <select value={form.pickupLocation} onChange={set('pickupLocation')} className="field">
+                      <option value="">Choose a hub</option>
+                      {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="field-label">Pickup date *</span>
+                    <input type="date" min={today} value={form.pickupDate} onChange={set('pickupDate')} className="field" />
+                  </label>
+                  <label className="block">
+                    <span className="field-label">Return date *</span>
+                    <input type="date" min={form.pickupDate || today} value={form.returnDate} onChange={set('returnDate')} className="field" />
+                  </label>
+                  <div className="flex flex-col justify-end">
+                    <p className="rounded-xl bg-ink/[0.05] px-4 py-3 text-sm">
+                      {totalDays > 0 ? <><strong>{totalDays}</strong> {totalDays === 1 ? 'day' : 'days'} · {rupees(baseAmount)}</> : <span className="text-muted">Pick your dates</span>}
+                    </p>
+                  </div>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend className="font-wide font-black uppercase tracking-tight text-xl">How you will pay</legend>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Payment method">
+                  {PAYMENT_METHODS.map((m) => {
+                    const on = form.paymentMethod === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => setForm((p) => ({ ...p, paymentMethod: m.id }))}
+                        className={`rounded-chip border p-5 text-left transition-colors ${on ? 'border-ink ring-1 ring-ink' : 'border-line hover:border-ink'}`}
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{m.label}</span>
+                          <span className={`grid h-5 w-5 place-items-center rounded-full border-2 ${on ? 'border-ink' : 'border-line'}`}>
+                            {on && <span className="h-2.5 w-2.5 rounded-full bg-ink" />}
+                          </span>
+                        </span>
+                        <span className="mt-1.5 block text-sm text-muted">{m.sublabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend className="font-wide font-black uppercase tracking-tight text-xl">Savings</legend>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="promo" className="field-label">Promo code</label>
+                    <div className="flex gap-2">
+                      <input
+                        id="promo"
+                        type="text"
+                        placeholder="DRIVEAWAY20"
+                        value={form.discountCode}
+                        onChange={(e) => { setForm((p) => ({ ...p, discountCode: e.target.value.toUpperCase() })); setDiscountInfo(null); }}
+                        className="field uppercase"
+                      />
+                      <Button variant="secondary" onClick={handleApplyDiscount} loading={discountLoading} disabled={!form.discountCode} className="flex-shrink-0">
+                        Apply
+                      </Button>
+                    </div>
+                    {discountInfo ? (
+                      <p className="mt-2 text-sm text-ok">
+                        {discountInfo.percentageOff}% off applied{discountInfo.maxDiscount ? `, up to ${rupees(discountInfo.maxDiscount)}` : ''}.
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted">Try DRIVEAWAY20, NEWUSER10 or AHMEDABAD15.</p>
+                    )}
+                  </div>
+                  {user && user.loyaltyPoints > 0 && (
+                    <label className={`flex cursor-pointer items-start gap-3 rounded-chip border p-4 ${form.useLoyaltyPoints ? 'border-ink' : 'border-line'}`}>
+                      <input
+                        type="checkbox"
+                        checked={form.useLoyaltyPoints}
+                        onChange={(e) => setForm((p) => ({ ...p, useLoyaltyPoints: e.target.checked }))}
+                        className="mt-0.5 h-5 w-5 rounded border-line bg-raised text-ink focus:ring-ink/30"
+                      />
+                      <span>
+                        <span className="block font-semibold">Use {user.loyaltyPoints.toLocaleString('en-IN')} loyalty points</span>
+                        <span className="block text-sm text-muted">Worth up to {rupees(Math.floor(user.loyaltyPoints / 10))}, capped at half the booking.</span>
+                      </span>
+                    </label>
+                  )}
+                </div>
+              </fieldset>
+
+              <Button onClick={() => validateStep1() && setStep(2)} className="w-full !py-4 text-base sm:w-auto sm:!px-10">
+                Continue to driver details <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <fieldset className="space-y-5">
+              <legend className="font-wide font-black uppercase tracking-tight text-xl">Who is driving</legend>
+              <p className="!mt-2 text-sm text-muted">Bring the same licence and ID when you collect the car. Fields marked * are required.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block"><span className="field-label">Full name *</span><input value={form.customerName} onChange={set('customerName')} autoComplete="name" className="field" /></label>
+                <label className="block"><span className="field-label">Phone *</span><input type="tel" value={form.customerPhone} onChange={set('customerPhone')} autoComplete="tel" className="field" /></label>
+                <label className="block sm:col-span-2"><span className="field-label">Email</span><input type="email" value={form.customerEmail} onChange={set('customerEmail')} autoComplete="email" className="field" /></label>
+                <label className="block"><span className="field-label">Driving licence number *</span><input value={form.licenseNumber} onChange={set('licenseNumber')} placeholder="GJ01 2020 0001234" className="field" /></label>
+                <label className="block"><span className="field-label">Date of birth</span><input type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className="field" /></label>
+                <label className="block sm:col-span-2"><span className="field-label">Address</span><input value={form.address} onChange={set('address')} autoComplete="street-address" className="field" /></label>
+                <label className="block">
+                  <span className="field-label">ID proof</span>
+                  <select value={form.idProofType} onChange={set('idProofType')} className="field">
+                    <option value="">Choose an ID</option>
+                    {['Aadhaar Card', 'PAN Card', 'Passport', 'Voter ID'].map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </label>
+                <label className="block"><span className="field-label">ID number</span><input value={form.idProofNumber} onChange={set('idProofNumber')} className="field" /></label>
+                <label className="block"><span className="field-label">Emergency contact</span><input value={form.emergencyContact} onChange={set('emergencyContact')} className="field" /></label>
+                <label className="block"><span className="field-label">Emergency phone</span><input type="tel" value={form.emergencyPhone} onChange={set('emergencyPhone')} className="field" /></label>
+                <label className="block sm:col-span-2"><span className="field-label">Requests</span><textarea rows={3} value={form.specialRequirements} onChange={set('specialRequirements')} placeholder="Airport terminal meet-up, child seat, extra luggage space…" className="field resize-none" /></label>
+              </div>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setStep(1)}><ChevronLeft className="h-4 w-4" /> Back</Button>
+                <Button onClick={() => validateStep2() && setStep(3)} className="!px-8">Review booking <ChevronRight className="h-4 w-4" /></Button>
+              </div>
+            </fieldset>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-8">
+              <h2 className="font-wide font-black uppercase tracking-tight text-xl">Check and confirm</h2>
+              <dl className="divide-y divide-line rounded-chip border border-line text-sm">
+                {[
+                  ['Car', carTitle(car)],
+                  ['Pickup hub', form.pickupLocation],
+                  ['Dates', `${fmt(form.pickupDate)} to ${fmt(form.returnDate)} (${totalDays} ${totalDays === 1 ? 'day' : 'days'})`],
+                  ['Payment', form.paymentMethod === 'Cash' ? 'Cash at pickup' : 'Online now (test payment gateway)'],
+                  ['Driver', form.customerName],
+                  ['Licence', form.licenseNumber],
+                  ['Phone', form.customerPhone],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-6 px-5 py-3.5">
+                    <dt className="text-muted">{k}</dt>
+                    <dd className="text-right font-semibold">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-sm text-muted">
+                You will earn <strong className="text-ink">{Math.floor(totalAmount / 100).toLocaleString('en-IN')} loyalty points</strong>. Your invoice is ready as soon as you confirm.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="secondary" onClick={() => setStep(2)}><ChevronLeft className="h-4 w-4" /> Back</Button>
+                <Button variant="paint" onClick={handleSubmit} loading={submitting} className="!px-8 !py-4 text-base">
+                  {form.paymentMethod === 'Cash' ? 'Reserve, pay at pickup' : `Pay ${rupees(Math.round(totalAmount))}`}
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Fare sheet */}
+        <aside className="lg:col-span-4">
+          <div className="sticky top-[96px] overflow-hidden rounded-chip border border-line bg-surface">
+            <div className="relative aspect-[16/9] bg-ink/5">
+              <img src={sizedImage(car.images?.main, 640)} alt="" decoding="async" onError={(e) => handleImageError(e, 640)} className="h-full w-full object-cover" />
+              <span className="lacquer absolute left-3 top-3 rounded-lg px-2.5 py-1.5 code-label text-[11px]">Paint {paint.no} · {car.type}</span>
+            </div>
+            <dl className="space-y-2.5 p-5 text-sm">
+              <div className="flex justify-between"><dt className="text-muted">Daily rate</dt><dd className="font-semibold">{rupees(car.dailyRate)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">Days</dt><dd className="font-semibold">{totalDays || '–'}</dd></div>
+              {totalDays > 0 && <div className="flex justify-between"><dt className="text-muted">Rental</dt><dd className="font-semibold">{rupees(baseAmount)}</dd></div>}
+              {discountAmount > 0 && <div className="flex justify-between text-ok"><dt>Promo {discountInfo?.percentageOff}%</dt><dd>-{rupees(Math.round(discountAmount))}</dd></div>}
+              {loyaltyDiscount > 0 && <div className="flex justify-between text-ok"><dt>Loyalty points</dt><dd>-{rupees(Math.round(loyaltyDiscount))}</dd></div>}
+              <div className="flex items-end justify-between border-t border-line pt-4">
+                <dt className="font-semibold">Total</dt>
+                <dd className="font-wide font-black text-3xl">{totalDays > 0 ? rupees(Math.round(totalAmount)) : '–'}</dd>
+              </div>
+              <p className="text-xs text-muted">Taxes included. Free cancellation.</p>
+            </dl>
+          </div>
+        </aside>
       </div>
 
       <RazorpayModal
@@ -523,7 +414,6 @@ export default function BookingPage() {
         customerPhone={form.customerPhone}
         onPaymentSuccess={handleRazorpaySuccess}
       />
-
-    </PageWrapper>
+    </div>
   );
 }

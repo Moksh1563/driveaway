@@ -1,5 +1,4 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jsPDF is loaded on demand (only when an invoice is downloaded) to keep page loads fast
 
 /**
  * Convert number to words in Indian Rupees format (Lakhs, Crores)
@@ -108,7 +107,11 @@ export const extractBookingInfo = (booking, car) => {
 /**
  * Generate PDF Tax Invoice
  */
-export const generatePDF = (booking, car) => {
+export const generatePDF = async (booking, car) => {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
   const info = extractBookingInfo(booking, car);
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.width;
