@@ -1,0 +1,32 @@
+# Render Blueprint for the Driveaway API (Express + MongoDB).
+# In Render: New + > Blueprint > pick this repository. Render reads this file,
+# creates the web service and generates JWT_SECRET for you.
+# You only fill in the values marked "sync: false" when Render asks for them.
+services:
+  - type: web
+    name: driveaway-api
+    runtime: node
+    plan: free
+    region: singapore          # closest Render region to Ahmedabad
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true    # Render creates a long random secret; you never see or type it
+      - key: JWT_EXPIRE
+        value: 7d
+      - key: MONGO_URI
+        sync: false            # your MongoDB Atlas connection string
+      - key: CLIENT_URL
+        sync: false            # your Vercel site, e.g. https://driveaway.vercel.app
+      - key: VERCEL_PROJECT_PREFIX
+        value: driveaway
+      - key: EMAIL_USER
+        sync: false            # optional: Gmail address for booking emails (leave blank to skip emails)
+      - key: EMAIL_PASS
+        sync: false            # optional: Gmail app password

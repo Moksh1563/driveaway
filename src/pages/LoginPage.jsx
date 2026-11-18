@@ -7,7 +7,10 @@ import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import AuthShell from '../components/layout/AuthShell';
 
-// Demo accounts from the project's seed data (server/seed.js), for presentations
+// Demo accounts from the project's seed data (server/seed.js), for presentations.
+// Shown in development; on a deployed site only when VITE_SHOW_DEMO_LOGINS=true,
+// because they let anyone sign in as the seeded admin.
+const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGINS === 'true';
 const DEMO = [
   { label: 'Admin account', email: 'admin@driveaway.com', password: 'REMOVED-PASSWORD', icon: Shield },
   { label: 'Customer account', email: 'customer@example.com', password: 'REMOVED-PASSWORD', icon: User },
@@ -92,6 +95,7 @@ export default function LoginPage() {
         </p>
       </form>
 
+      {SHOW_DEMO && (
       <div className="mt-10 border-t border-line pt-6">
         <p className="field-label">Demo accounts</p>
         <div className="grid gap-2">
@@ -114,6 +118,7 @@ export default function LoginPage() {
           ))}
         </div>
       </div>
+      )}
     </AuthShell>
   );
 }

@@ -10,8 +10,20 @@ const isWikimediaThumb = (url) => url.includes('upload.wikimedia.org') && url.in
  * Returns a resized URL for Unsplash and Wikimedia Commons images.
  * Other URLs (e.g. /uploads/...) are returned unchanged.
  */
+// When the API lives on another domain (VITE_API_BASE_URL like https://x.onrender.com/api),
+// older admin uploads saved as "/uploads/..." must load from the API's origin, not the website's.
+const API_ORIGIN = (() => {
+  try {
+    const base = import.meta.env.VITE_API_BASE_URL;
+    return base && /^https?:\/\//.test(base) ? new URL(base).origin : '';
+  } catch {
+    return '';
+  }
+})();
+
 export function sizedImage(url, width = 800, quality = 70) {
   if (!url) return sizedImage(FALLBACK_CAR_IMAGE, width, quality);
+  if (url.startsWith('/uploads/')) return API_ORIGIN + url;
   if (isWikimediaThumb(url)) {
     const w = WIKIMEDIA_WIDTHS.find((x) => x >= width) || WIKIMEDIA_WIDTHS[WIKIMEDIA_WIDTHS.length - 1];
     return url.replace(/\/(\d+)px-([^/]+)$/, `/${w}px-$2`);
