@@ -1,5 +1,6 @@
 // jsPDF is loaded on demand (only when an invoice is downloaded) to keep page loads fast
 import { PAINTS, PAINT_ORDER, carTitle } from '../../theme/paints';
+import { paymentLabel } from '../../utils/payment';
 
 /**
  * Convert number to words in Indian Rupees format (Lakhs, Crores)
@@ -96,7 +97,7 @@ export const extractBookingInfo = (booking, car) => {
     pickupLocation: booking?.pickupLocation || 'Main Hub, Ahmedabad',
     licenseNumber: booking?.licenseNumber || '',
     address: booking?.address || '',
-    paymentMethod: booking?.paymentMethod || 'Razorpay / Online',
+    paymentMethod: paymentLabel(booking?.paymentMethod),
     paymentCompleted: Boolean(booking?.paymentCompleted),
     paymentId: booking?.paymentId || (booking?.paymentCompleted ? 'PAID-ONLINE' : 'PENDING'),
     createdAt: booking?.createdAt || Date.now(),

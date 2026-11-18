@@ -4,7 +4,7 @@
  * ============================================================================
  * Express.js API server for Driveaway Car Rentals (Ahmedabad, Gujarat).
  * Provides RESTful endpoints for authentication, cars fleet, reservations,
- * reviews, razorpay dupe payments, image uploads, and discount broadcasting.
+ * reviews, a simulated test checkout, image uploads, and discount broadcasting.
  */
 
 const express = require('express');

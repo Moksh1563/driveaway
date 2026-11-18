@@ -7,6 +7,7 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import { generatePDF, sendWhatsAppInvoice } from '../../components/invoice/InvoiceGenerator';
 import { TableSkeleton } from '../../components/ui/Skeletons';
+import { paymentLabel } from '../../utils/payment';
 
 const STATUSES = ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
@@ -226,7 +227,7 @@ export default function AdminBookingsPage() {
                 ['Discount Applied', viewModal.discountAmount > 0 ? `-₹${viewModal.discountAmount?.toLocaleString('en-IN')} (${viewModal.discountCode})` : 'None'],
                 ['Loyalty Points', viewModal.loyaltyPointsUsed > 0 ? `${viewModal.loyaltyPointsUsed} pts used` : 'None'],
                 ['Final Total Amount', `₹${viewModal.totalAmount?.toLocaleString('en-IN')}`],
-                ['Payment Method', viewModal.paymentMethod],
+                ['Payment Method', paymentLabel(viewModal.paymentMethod)],
                 ['Payment Status', viewModal.paymentCompleted ? 'Paid' : 'Pending'],
                 ['Driver License', viewModal.licenseNumber],
               ].map(([k, v]) => (

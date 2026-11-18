@@ -9,7 +9,7 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import StarRating from '../components/ui/StarRating';
 import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceGenerator';
-import RazorpayModal from '../components/payment/RazorpayModal';
+import TestCheckoutModal from '../components/payment/TestCheckoutModal';
 import { sizedImage, handleImageError } from '../utils/image';
 import { paintFor, paintStyle, rupees } from '../theme/paints';
 import Reveal from '../components/ui/Reveal';
@@ -321,7 +321,7 @@ export default function UserDashboardPage() {
         <Button onClick={handleReview} className="mt-6 w-full !py-4">Post review</Button>
       </Modal>
 
-      <RazorpayModal
+      <TestCheckoutModal
         isOpen={!!payBooking}
         onClose={() => setPayBooking(null)}
         amount={payBooking?.totalAmount || 0}

@@ -6,7 +6,7 @@
  *  - Step 1: Trip dates & Ahmedabad pickup hub selection
  *  - Step 2: Driver details & verification credentials
  *  - Step 3: Fare summary, dynamic promo discounts, loyalty points & payment
- * Integrates Razorpay dupe payment gateway modal and Pay-at-Pickup mode.
+ * Pay online through the Driveaway test checkout (a simulated payment), or pay at pickup.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -16,7 +16,7 @@ import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
-import RazorpayModal from '../components/payment/RazorpayModal';
+import TestCheckoutModal from '../components/payment/TestCheckoutModal';
 import { sizedImage, handleImageError } from '../utils/image';
 import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
 import { HUBS } from '../theme/hubs';
@@ -24,7 +24,7 @@ import { BookingSkeleton } from '../components/ui/Skeletons';
 
 const LOCATIONS = HUBS;
 const PAYMENT_METHODS = [
-  { id: 'Razorpay', label: 'Pay online now', sublabel: 'UPI, cards, net banking or wallets. Confirmed instantly.' },
+  { id: 'Online test', label: 'Pay online now (test)', sublabel: 'A demo checkout: no real money is charged. Confirmed instantly.' },
   { id: 'Cash', label: 'Pay at pickup', sublabel: 'Pay in cash at the hub when you collect the car.' },
 ];
 
@@ -47,7 +47,7 @@ export default function BookingPage() {
     pickupDate: trip.from || '',
     returnDate: trip.to || '',
     pickupLocation: HUBS.includes(trip.location) ? trip.location : '',
-    paymentMethod: 'Razorpay',
+    paymentMethod: 'Online test',
     discountCode: '',
     useLoyaltyPoints: false,
     customerName: user?.name || '',
@@ -116,12 +116,12 @@ export default function BookingPage() {
     }
   };
 
-  const handleRazorpaySuccess = async (paymentData) => {
+  const handlePaymentSuccess = async (paymentData) => {
     setShowPaymentModal(false);
     await confirmBooking({
       paymentCompleted: true,
       paymentId: paymentData.paymentId,
-      paymentMethod: paymentData.paymentMethod || 'Razorpay',
+      paymentMethod: paymentData.paymentMethod || 'Online test',
     });
   };
 
@@ -358,7 +358,7 @@ export default function BookingPage() {
                   ['Car', carTitle(car)],
                   ['Pickup hub', form.pickupLocation],
                   ['Dates', `${fmt(form.pickupDate)} to ${fmt(form.returnDate)} (${totalDays} ${totalDays === 1 ? 'day' : 'days'})`],
-                  ['Payment', form.paymentMethod === 'Cash' ? 'Cash at pickup' : 'Online now (test payment gateway)'],
+                  ['Payment', form.paymentMethod === 'Cash' ? 'Cash at pickup' : 'Online now (test checkout, no real charge)'],
                   ['Driver', form.customerName],
                   ['Licence', form.licenseNumber],
                   ['Phone', form.customerPhone],
@@ -407,14 +407,14 @@ export default function BookingPage() {
         </aside>
       </div>
 
-      <RazorpayModal
+      <TestCheckoutModal
         isOpen={showPaymentModal}
         onClose={() => !submitting && setShowPaymentModal(false)}
         amount={totalAmount}
         customerName={form.customerName}
         customerEmail={form.customerEmail}
         customerPhone={form.customerPhone}
-        onPaymentSuccess={handleRazorpaySuccess}
+        onPaymentSuccess={handlePaymentSuccess}
       />
     </div>
   );
