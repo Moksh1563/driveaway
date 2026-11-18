@@ -1,6 +1,7 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
 const { escapeHtml } = require('../middleware/securityMiddleware');
+const { PAINTS, PAINT_ORDER, paintFor } = require('./paints');
 
 // Escape user-controlled booking fields before they are embedded in email HTML
 const safeBooking = (booking) => {
@@ -26,185 +27,182 @@ const createTransporter = () => {
   });
 };
 
-/**
- * Format date helper
- */
 const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
   try {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return new Date(dateStr).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   } catch (e) {
     return dateStr;
   }
 };
 
-/**
- * Send Booking Confirmation Email
+const rupees = (n) => `&#8377;${Number(n || 0).toLocaleString('en-IN')}`;
+
+/** "McLaren Senna" stays as is; "Spectre" from Rolls-Royce becomes "Rolls-Royce Spectre". Plain text (for subjects). */
+const carTitleText = (car) => {
+  const name = (car?.name || '').trim();
+  const company = (car?.company || '').trim();
+  const firstWord = (s) => s.toLowerCase().split(/[\s-]/)[0];
+  return (company && firstWord(name) !== firstWord(company) ? `${company} ${name}` : name) || 'Rental car';
+};
+const carTitle = (car) => escapeHtml(carTitleText(car));
+
+/* ───────────────── Lacquer email kit ─────────────────
+ * Same design language as the website: a band in the car category's paint, wide black
+ * uppercase type, hairline rules and the eight-paint strip. Table layout + inline styles
+ * so it renders in Gmail, Outlook and Apple Mail alike.
  */
-const sendBookingConfirmationEmail = async ({ booking: rawBooking, car, user }) => {
+const INK = '#111113';
+const MUTED = '#6B6862';
+const LINE = '#D6D2CB';
+const GROUND = '#ECEAE6';
+const DISPLAY = "'Archivo', 'Arial Black', 'Helvetica Neue', Arial, sans-serif";
+const BODY = "'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+
+const strip = () => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    ${PAINT_ORDER.map((t) => `<td height="6" style="height:6px;line-height:6px;font-size:0;background:${PAINTS[t].hex};">&nbsp;</td>`).join('')}
+  </tr></table>`;
+
+const label = (text, color = MUTED) =>
+  `<div style="font-family:${BODY};font-size:11px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:${color};">${text}</div>`;
+
+/** A label / value line, separated from the next by a hairline. */
+const row = (name, value, { strong = false, color = INK } = {}) => `
+  <tr>
+    <td style="padding:12px 0;border-bottom:1px solid ${LINE};font-family:${BODY};font-size:14px;color:${MUTED};">${name}</td>
+    <td align="right" style="padding:12px 0;border-bottom:1px solid ${LINE};font-family:${BODY};font-size:14px;font-weight:${strong ? 800 : 600};color:${color};">${value}</td>
+  </tr>`;
+
+const rows = (items) =>
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${items.join('')}</table>`;
+
+const section = (title, inner) => `
+  <tr><td style="padding:28px 32px 0 32px;">
+    ${label(title)}
+    <div style="height:6px;line-height:6px;font-size:0;">&nbsp;</div>
+    ${inner}
+  </td></tr>`;
+
+const button = (href, text, paint) => `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td style="border-radius:999px;background:${paint.hex};">
+      <a href="${href}" style="display:inline-block;padding:15px 30px;font-family:${BODY};font-size:15px;font-weight:700;color:${paint.on};text-decoration:none;border-radius:999px;">${text} &rarr;</a>
+    </td>
+  </tr></table>`;
+
+/** Full email: preheader, paint band with eyebrow + headline, body rows, footer. */
+const layout = ({ paint, eyebrow, title, preheader = '', intro = '', body = '', footer = '' }) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>${title.replace(/<br>/g, ' ').replace(/<[^>]+>/g, '')}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:${GROUND};">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${preheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${GROUND};">
+    <tr><td align="center" style="padding:28px 12px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#FFFFFF;border-radius:18px;overflow:hidden;">
+        <tr><td style="background:${paint.hex};padding:28px 32px 34px 32px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td style="font-family:${DISPLAY};font-size:18px;font-weight:900;letter-spacing:-0.3px;text-transform:uppercase;color:${paint.on};">Driveaway</td>
+            <td align="right">${label(eyebrow, paint.on)}</td>
+          </tr></table>
+          <div style="height:36px;line-height:36px;font-size:0;">&nbsp;</div>
+          <div style="font-family:${DISPLAY};font-size:36px;line-height:1.02;font-weight:900;letter-spacing:-1px;text-transform:uppercase;color:${paint.on};">${title}</div>
+          ${paint.type ? `<div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>${label(`Paint ${paint.no} &middot; ${paint.type} &middot; ${paint.name}`, paint.on)}` : ''}
+        </td></tr>
+        <tr><td>${strip()}</td></tr>
+        ${intro ? `<tr><td style="padding:28px 32px 0 32px;font-family:${BODY};font-size:15px;line-height:1.6;color:${INK};">${intro}</td></tr>` : ''}
+        ${body}
+        <tr><td style="padding:32px;">
+          <div style="border-top:1px solid ${LINE};padding-top:18px;font-family:${BODY};font-size:12px;line-height:1.6;color:${MUTED};">
+            ${footer || 'Questions? Reply to this email or call +91 79-2630-0000.'}<br>
+            Driveaway &middot; Premium car rentals &middot; Ahmedabad, Gujarat
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+/**
+ * Booking confirmation (sent right after a booking is made)
+ */
+const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user }) => {
   const booking = safeBooking(rawBooking);
+  const carDoc = car || booking.car || {};
+  const paint = paintFor(carDoc.type);
+  const name = booking.customerName || escapeHtml((user && user.name) || 'there'); // customerName is already escaped
+  const carName = carTitle(carDoc);
+
+  const totalDays = Math.max(1, Number(booking.totalDays) || 1);
+  const dailyRate = Number(booking.dailyRateSnapshot || carDoc.dailyRate || 0);
+  const baseRental = totalDays * (dailyRate > 0 ? dailyRate : Math.round(Number(booking.totalAmount || 0) / totalDays));
+  const totalAmount = Number(booking.totalAmount || 0);
+  const gst = Math.round((totalAmount - totalAmount / 1.18) * 100) / 100;
+  const paid = Boolean(booking.paymentCompleted);
+
+  const fare = [
+    row(`${rupees(dailyRate)} &times; ${totalDays} day${totalDays > 1 ? 's' : ''}`, rupees(baseRental)),
+    booking.discountAmount > 0 ? row(`Promo ${booking.discountCode || ''}`, `&minus;${rupees(booking.discountAmount)}`, { color: '#15803D' }) : '',
+    booking.loyaltyPointsUsed > 0
+      ? row(`Loyalty points (${booking.loyaltyPointsUsed})`, `&minus;${rupees(Math.round(booking.loyaltyPointsUsed / 10))}`, { color: '#15803D' })
+      : '',
+    row('GST 18% (included)', rupees(gst)),
+    row('Payment', `${booking.paymentMethod || 'Online'} &middot; ${paid ? 'Paid' : 'Pay at pickup'}`),
+  ];
+
+  const total = `
+    <tr><td style="padding:20px 32px 0 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${paint.hex};border-radius:14px;">
+        <tr>
+          <td style="padding:18px 22px;">${label(paid ? 'Total paid' : 'Total due at pickup', paint.on)}</td>
+          <td align="right" style="padding:18px 22px;font-family:${DISPLAY};font-size:28px;font-weight:900;color:${paint.on};">${rupees(totalAmount)}</td>
+        </tr>
+      </table>
+    </td></tr>`;
+
+  return {
+    subject: `Booking confirmed: ${carTitleText(carDoc)} · Invoice ${rawBooking?.invoiceNumber || ''}`.trim(),
+    html: layout({
+      paint,
+      eyebrow: `Invoice ${booking.invoiceNumber || ''}`,
+      title: paid ? 'Paid. The keys<br>are yours.' : 'Reserved. See you<br>at the hub.',
+      preheader: `${carName}, ${formatDate(booking.pickupDate)} to ${formatDate(booking.returnDate)}.`,
+      intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is booked. Here is everything you need for pickup.`,
+      body:
+        section('Your drive', rows([
+          row('Car', carName, { strong: true }),
+          row('Pickup hub', booking.pickupLocation || 'Main hub, Ahmedabad'),
+          row('Pickup', formatDate(booking.pickupDate)),
+          row('Return', formatDate(booking.returnDate)),
+          row('Duration', `${totalDays} day${totalDays > 1 ? 's' : ''}`),
+        ])) +
+        section('Fare', rows(fare)) +
+        total +
+        `<tr><td style="padding:22px 32px 0 32px;font-family:${BODY};font-size:13px;line-height:1.6;color:${MUTED};">
+          Bring your driving licence and an original government ID to the hub. You can download the PDF invoice from <strong style="color:${INK};">My garage</strong> on the website.
+        </td></tr>`,
+    }),
+  };
+};
+
+const sendBookingConfirmationEmail = async ({ booking, car, user }) => {
   try {
     const transporter = createTransporter();
     if (!transporter) return;
-
     const recipient = booking.customerEmail || (user && user.email);
     if (!recipient) {
       console.warn('⚠️ No recipient email found for booking confirmation.');
       return;
     }
-
-    const carCompany = (car?.company || (booking.car && booking.car.company) || '').trim();
-    const carModel = (car?.name || (booking.car && booking.car.name) || 'Rental Car').trim();
-    const carName = carModel.toLowerCase().startsWith(carCompany.toLowerCase())
-      ? carModel
-      : `${carCompany} ${carModel}`.trim();
-
-    const pickupDateStr = formatDate(booking.pickupDate);
-    const returnDateStr = formatDate(booking.returnDate);
-    const totalDays = Math.max(1, Number(booking.totalDays) || 1);
-    const dailyRate = Number(booking.dailyRateSnapshot || (car && car.dailyRate) || (booking.car && booking.car.dailyRate) || 0);
-    const baseRental = totalDays * (dailyRate > 0 ? dailyRate : Math.round(Number(booking.totalAmount || 0) / totalDays));
-    const totalAmount = Number(booking.totalAmount || 0);
-
-    const taxable = Math.round((totalAmount / 1.18) * 100) / 100;
-    const gst = Math.round((totalAmount - taxable) * 100) / 100;
-
-    const mailOptions = {
-      from: `"Driveaway Rentals" <${process.env.EMAIL_USER}>`,
-      to: recipient,
-      subject: `🚗 Booking Confirmed! Invoice #${booking.invoiceNumber} - Driveaway`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
-            .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
-            .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 30px 24px; text-align: center; }
-            .logo { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #38bdf8; margin: 0; }
-            .subtitle { font-size: 14px; color: #94a3b8; margin-top: 6px; }
-            .status-badge { display: inline-block; background-color: #10b981; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-top: 12px; }
-            .content { padding: 24px; }
-            .card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
-            .section-title { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-            .row-label { color: #64748b; }
-            .row-value { font-weight: 600; color: #0f172a; text-align: right; }
-            .highlight { color: #0284c7; }
-            .divider { border-top: 1px dashed #cbd5e1; margin: 12px 0; }
-            .total-row { display: flex; justify-content: space-between; font-size: 18px; font-weight: 800; color: #0f172a; padding-top: 4px; }
-            .footer { background: #f1f5f9; padding: 18px; text-align: center; font-size: 12px; color: #64748b; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1 class="logo">🚗 DRIVEAWAY</h1>
-              <p class="subtitle">Ahmedabad's Premier Car Rental Experience</p>
-              <div class="status-badge">Booking Confirmed</div>
-            </div>
-
-            <div class="content">
-              <p style="font-size: 16px; margin-top: 0;">Hi <strong>${booking.customerName || (user && user.name) || 'Valued Customer'}</strong>,</p>
-              <p style="color: #475569; font-size: 14px; line-height: 1.5;">
-                Thank you for choosing Driveaway! Your booking has been confirmed. Below are your reservation and invoice details:
-              </p>
-
-              <!-- Booking Details -->
-              <div class="card">
-                <div class="section-title">Reservation Details</div>
-                <div class="row">
-                  <span class="row-label">Invoice Number:</span>
-                  <span class="row-value highlight">#${booking.invoiceNumber || 'N/A'}</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Vehicle:</span>
-                  <span class="row-value">${carName}</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Pickup Location:</span>
-                  <span class="row-value">${booking.pickupLocation || 'Main Hub'}</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Pickup Date:</span>
-                  <span class="row-value">${pickupDateStr}</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Return Date:</span>
-                  <span class="row-value">${returnDateStr}</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Total Duration:</span>
-                  <span class="row-value">${totalDays} Day(s)</span>
-                </div>
-              </div>
-
-              <!-- Payment Summary -->
-              <div class="card">
-                <div class="section-title">Payment Summary</div>
-                <div class="row">
-                  <span class="row-label">Daily Rental Rate:</span>
-                  <span class="row-value">₹${dailyRate.toLocaleString('en-IN')}/day</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Base Rental (${totalDays} Days):</span>
-                  <span class="row-value">₹${baseRental.toLocaleString('en-IN')}</span>
-                </div>
-                <div class="row">
-                  <span class="row-label">Payment Method:</span>
-                  <span class="row-value">${booking.paymentMethod || 'Online'}</span>
-                </div>
-                ${
-                  booking.discountAmount > 0
-                    ? `
-                <div class="row" style="color: #16a34a;">
-                  <span>Promo Discount (${booking.discountCode || 'Promo'}):</span>
-                  <span>-₹${Number(booking.discountAmount).toLocaleString('en-IN')}</span>
-                </div>`
-                    : ''
-                }
-                ${
-                  booking.loyaltyPointsUsed > 0
-                    ? `
-                <div class="row" style="color: #16a34a;">
-                  <span>Loyalty Discount (${booking.loyaltyPointsUsed} pts):</span>
-                  <span>-₹${Math.round(booking.loyaltyPointsUsed / 10).toLocaleString('en-IN')}</span>
-                </div>`
-                    : ''
-                }
-                <div class="row" style="font-size: 12px; color: #64748b; margin-top: 4px;">
-                  <span>Taxes (18% GST Included):</span>
-                  <span>₹${gst.toLocaleString('en-IN')}</span>
-                </div>
-                <div class="divider"></div>
-                <div class="total-row">
-                  <span>Total Amount Paid:</span>
-                  <span style="color: #0284c7;">₹${totalAmount.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-
-              <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
-
-                <strong>Important Notice:</strong> Please present a valid Driver's License and original Government ID at the time of pickup.
-              </p>
-            </div>
-
-            <div class="footer">
-              <p style="margin: 0 0 6px 0;">Need help or want to make changes? Contact us at support@driveaway.com</p>
-              <p style="margin: 0;">Driveaway Car Rentals • Ahmedabad, Gujarat</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+    const { subject, html } = buildBookingConfirmationEmail({ booking, car, user });
+    const info = await transporter.sendMail({ from: `"Driveaway Rentals" <${process.env.EMAIL_USER}>`, to: recipient, subject, html });
     console.log(`✉️ Booking confirmation email sent to ${recipient} (Message ID: ${info.messageId})`);
   } catch (error) {
     console.error('❌ Error sending booking confirmation email:', error.message);
@@ -212,103 +210,48 @@ const sendBookingConfirmationEmail = async ({ booking: rawBooking, car, user }) 
 };
 
 /**
- * Send Contact Message Confirmation (User + Admin notification)
+ * Booking status update (admin confirms, completes or cancels)
  */
-const sendContactMessageEmail = async (raw) => {
-  const email = raw.email;
-  const name = escapeHtml(raw.name);
-  const phone = escapeHtml(raw.phone);
-  const subject = escapeHtml(raw.subject);
-  const message = escapeHtml(raw.message).replace(/\n/g, '<br>');
-  try {
-    const transporter = createTransporter();
-    if (!transporter) return;
-
-    // 1. Send Auto-Reply to the user
-    await transporter.sendMail({
-      from: `"Driveaway Support" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: `We've received your message - Driveaway`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #0284c7; margin-top: 0;">Thanks for reaching out, ${name}! 🚗</h2>
-          <p style="color: #334155; font-size: 14px; line-height: 1.6;">
-            We have received your message regarding <strong>${subject || 'General Inquiry'}</strong>. Our customer support team in Ahmedabad will get back to you shortly.
-          </p>
-          <div style="background-color: #f8fafc; border-left: 4px solid #0284c7; padding: 12px 16px; margin: 16px 0; font-size: 13px; color: #475569;">
-            <em>"${message}"</em>
-          </div>
-          <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">
-            Best regards,<br>
-            Driveaway Support Team
-          </p>
-        </div>
-      `,
-    });
-
-    // 2. Alert Admin (send copy to EMAIL_USER)
-    await transporter.sendMail({
-      from: `"Driveaway Contact Bot" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
-      subject: `📩 New Contact Form Inquiry from ${name} (${subject || 'General'})`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h3 style="color: #0f172a; margin-top: 0;">New Contact Form Message</h3>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-          <p><strong>Subject:</strong> ${subject || 'N/A'}</p>
-          <p><strong>Message:</strong></p>
-          <div style="background-color: #f1f5f9; padding: 12px; border-radius: 6px;">
-            ${message}
-          </div>
-        </div>
-      `,
-    });
-
-    console.log(`✉️ Contact auto-reply sent to ${email} and admin notification dispatched.`);
-  } catch (error) {
-    console.error('❌ Error sending contact message emails:', error.message);
-  }
+const STATUS_COPY = {
+  Confirmed: { title: 'Confirmed.<br>Engine warm.', text: 'Your booking is confirmed. The car will be ready at the hub on your pickup date.' },
+  Completed: { title: 'Thanks for<br>the drive.', text: 'Your rental is complete. We hope it was a good one. You can leave a review from My garage.' },
+  Cancelled: { title: 'Booking<br>cancelled.', text: 'Your booking has been cancelled. If you paid online, the refund goes back to your original payment method.' },
+  Pending: { title: 'Booking<br>received.', text: 'We have your booking and will confirm it shortly.' },
 };
 
-/**
- * Send Booking Status Update Email (Admin updates status: Confirmed, Completed, Cancelled)
- */
-const sendBookingStatusUpdateEmail = async ({ booking: rawBooking, newStatus }) => {
+const buildBookingStatusUpdateEmail = ({ booking: rawBooking, newStatus }) => {
   const booking = safeBooking(rawBooking);
+  const carDoc = booking.car || {};
+  const paint = paintFor(carDoc.type);
+  const status = escapeHtml(newStatus);
+  const copy = STATUS_COPY[newStatus] || { title: `Status:<br>${status}.`, text: `Your booking status is now ${status}.` };
+
+  return {
+    subject: `Booking ${rawBooking?.invoiceNumber || ''}: ${newStatus}`.replace(/\s+/g, ' '),
+    html: layout({
+      paint,
+      eyebrow: `Invoice ${booking.invoiceNumber || ''}`,
+      title: copy.title,
+      preheader: copy.text,
+      intro: `Hi <strong>${booking.customerName || 'there'}</strong>, ${copy.text.charAt(0).toLowerCase()}${copy.text.slice(1)}`,
+      body: section('Booking', rows([
+        row('Car', carTitle(carDoc), { strong: true }),
+        row('Status', status, { strong: true, color: newStatus === 'Cancelled' ? '#B91C1C' : INK }),
+        row('Pickup', formatDate(booking.pickupDate)),
+        row('Return', formatDate(booking.returnDate)),
+      ])),
+    }),
+  };
+};
+
+const sendBookingStatusUpdateEmail = async ({ booking, newStatus }) => {
   try {
     const transporter = createTransporter();
     if (!transporter) return;
-
     const recipient = booking.customerEmail || (booking.user && booking.user.email);
     if (!recipient) return;
-
-    const carName = booking.car ? `${booking.car.company || ''} ${booking.car.name || 'Rental Car'}`.trim() : 'Rental Car';
-
-    await transporter.sendMail({
-      from: `"Driveaway Rentals" <${process.env.EMAIL_USER}>`,
-      to: recipient,
-      subject: `🚗 Update on Booking #${booking.invoiceNumber}: Status is ${newStatus}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #0f172a; margin-top: 0;">Booking Status Updated 🚗</h2>
-          <p style="color: #334155; font-size: 14px; line-height: 1.6;">
-            Hello <strong>${booking.customerName || 'Customer'}</strong>,
-          </p>
-          <p style="color: #334155; font-size: 14px; line-height: 1.6;">
-            The status of your booking for <strong>${carName}</strong> (Invoice #${booking.invoiceNumber}) has been updated to:
-          </p>
-          <div style="display: inline-block; background-color: #0284c7; color: white; padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 14px; margin: 10px 0;">
-            ${newStatus}
-          </div>
-          <p style="font-size: 13px; color: #64748b; margin-top: 16px;">
-            If you have any questions about this change, feel free to reply to this email or reach us at support@driveaway.com.
-          </p>
-        </div>
-      `,
-    });
-
+    const { subject, html } = buildBookingStatusUpdateEmail({ booking, newStatus });
+    await transporter.sendMail({ from: `"Driveaway Rentals" <${process.env.EMAIL_USER}>`, to: recipient, subject, html });
     console.log(`✉️ Booking status update email sent to ${recipient} (Status: ${newStatus})`);
   } catch (error) {
     console.error('❌ Error sending status update email:', error.message);
@@ -316,179 +259,153 @@ const sendBookingStatusUpdateEmail = async ({ booking: rawBooking, newStatus }) 
 };
 
 /**
- * Send Car Availability Notification Email
+ * Car is available again (customer asked to be notified)
  */
+const buildCarAvailabilityEmail = ({ car }) => {
+  const paint = paintFor(car.type);
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const carName = carTitle(car);
+  const image = car.images?.main ? escapeHtml(String(car.images.main).replace('/1280px-', '/960px-')) : '';
+
+  return {
+    subject: `${carTitleText(car)} is free again`,
+    html: layout({
+      paint,
+      eyebrow: 'Now available',
+      title: 'It is back<br>in the garage.',
+      preheader: `${carName} is available to book.`,
+      intro: `You asked us to tell you when <strong>${carName}</strong> was free. It is, as of now.`,
+      body: `
+        ${image ? `<tr><td style="padding:24px 32px 0 32px;"><img src="${image}" width="536" alt="${carName}" style="display:block;width:100%;height:auto;border-radius:14px;"></td></tr>` : ''}
+        ${section('The car', rows([
+          row('Car', carName, { strong: true }),
+          row('Daily rate', rupees(car.dailyRate), { strong: true }),
+          row('Seats', escapeHtml(car.seats || 5)),
+          row('Fuel', escapeHtml(car.fuelType || 'Petrol')),
+          row('Gearbox', escapeHtml(car.transmission || 'Automatic')),
+        ]))}
+        <tr><td style="padding:26px 32px 0 32px;">${button(`${clientUrl}/cars/${car._id}`, 'Book it now', paint)}</td></tr>`,
+      footer: 'This was a one-time alert because you asked to be notified about this car.',
+    }),
+  };
+};
+
 const sendCarAvailabilityEmail = async ({ recipientEmail, car }) => {
   try {
     const transporter = createTransporter();
     if (!transporter) return;
     if (!recipientEmail || !car) return;
-
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const carName = `${car.company || ''} ${car.name || 'Vehicle'}`.trim();
-    const carImage = car.images?.main || (car.images && car.images[0]) || '';
-    const carUrl = `${clientUrl}/fleet/${car._id}`;
-
-    const mailOptions = {
-      from: `"Driveaway Fleet Alerts" <${process.env.EMAIL_USER}>`,
-      to: recipientEmail,
-      subject: `🔔 Good News! ${carName} is Back & Available for Booking!`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
-            .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
-            .header { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
-            .logo { font-size: 26px; font-weight: 800; color: #ffffff; margin: 0; }
-            .badge { display: inline-block; background-color: #10b981; color: white; padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; margin-top: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-            .content { padding: 28px 24px; text-align: center; }
-            .car-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: left; }
-            .car-img { width: 100%; max-height: 240px; object-fit: cover; border-radius: 8px; margin-bottom: 16px; background-color: #e2e8f0; }
-            .car-title { font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 6px 0; }
-            .car-price { font-size: 18px; font-weight: 800; color: #0284c7; margin-bottom: 12px; }
-            .specs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; text-align: center; font-size: 13px; color: #64748b; }
-            .spec-box { background: #ffffff; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; }
-            .btn { display: inline-block; background: #0284c7; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-top: 10px; }
-            .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1 class="logo">🚗 DRIVEAWAY</h1>
-              <p style="margin: 6px 0 0 0; color: #e0f2fe; font-size: 14px;">Vehicle Availability Notification</p>
-              <div class="badge">Now Available</div>
-            </div>
-
-            <div class="content">
-              <h2 style="font-size: 22px; color: #0f172a; margin-top: 0;">You asked to be notified!</h2>
-              <p style="color: #475569; font-size: 15px; line-height: 1.5; margin-bottom: 20px;">
-                Great news! <strong>${carName}</strong> is back from its rental or maintenance schedule and is now ready for booking.
-              </p>
-
-              <div class="car-card">
-                ${carImage ? `<img src="${carImage}" alt="${carName}" class="car-img" />` : ''}
-                <div class="car-title">${carName}</div>
-                <div class="car-price">₹${car.dailyRate}/day</div>
-                <div class="specs-grid">
-                  <div class="spec-box"><strong>Seats:</strong> ${car.seats || 5}</div>
-                  <div class="spec-box"><strong>Fuel:</strong> ${car.fuelType || 'Petrol'}</div>
-                  <div class="spec-box"><strong>Trans:</strong> ${car.transmission || 'Automatic'}</div>
-                </div>
-              </div>
-
-              <a href="${carUrl}" class="btn">Book ${carName} Now →</a>
-
-              <p style="font-size: 13px; color: #94a3b8; margin-top: 24px; line-height: 1.4;">
-                Hurry, popular vehicles get booked fast! This was a one-time alert because you signed up for notifications on this vehicle.
-              </p>
-            </div>
-
-            <div class="footer">
-              <p style="margin: 0 0 6px 0;">Driveaway Car Rentals • Ahmedabad, Gujarat</p>
-              <p style="margin: 0;">You received this because you requested availability updates for this car.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✉️ Car availability email sent to ${recipientEmail} for car "${carName}" (Message ID: ${info.messageId})`);
+    const { subject, html } = buildCarAvailabilityEmail({ car });
+    const info = await transporter.sendMail({ from: `"Driveaway Fleet Alerts" <${process.env.EMAIL_USER}>`, to: recipientEmail, subject, html });
+    console.log(`✉️ Car availability email sent to ${recipientEmail} (Message ID: ${info.messageId})`);
   } catch (error) {
     console.error(`❌ Error sending car availability email to ${recipientEmail}:`, error.message);
   }
 };
 
 /**
- * Send Discount Announcement / Broadcast Email
+ * Promo code broadcast (no single car, so the band is the house ink with the full paint strip)
  */
-const sendDiscountBroadcastEmail = async ({ recipientEmail, recipientName: rawName, discountCode, percentageOff, maxDiscount, description: rawDescription }) => {
+const buildDiscountBroadcastEmail = ({ recipientName: rawName, discountCode: rawCode, percentageOff, maxDiscount, description: rawDescription }) => {
+  const paint = paintFor(null);
   const recipientName = escapeHtml(rawName);
   const description = escapeHtml(rawDescription);
+  const code = escapeHtml(rawCode);
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const pct = Number(percentageOff) || 0;
+
+  return {
+    subject: `${pct}% off your next drive with ${rawCode}`,
+    html: layout({
+      paint,
+      eyebrow: 'Offer',
+      title: `${pct}% off<br>any paint.`,
+      preheader: `Use code ${code} at checkout.`,
+      intro: `${recipientName ? `Hi <strong>${recipientName}</strong>, h` : 'H'}ere is ${pct}% off your next rental, on any car in the fleet.`,
+      body: `
+        <tr><td style="padding:24px 32px 0 32px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:2px dashed ${INK};border-radius:14px;">
+            <tr><td align="center" style="padding:22px;">
+              ${label('Promo code')}
+              <div style="font-family:${DISPLAY};font-size:34px;font-weight:900;letter-spacing:3px;color:${INK};padding:6px 0;">${code}</div>
+              <div style="font-family:${BODY};font-size:14px;color:${MUTED};">${pct}% off${maxDiscount ? `, up to ${rupees(maxDiscount)}` : ''}</div>
+            </td></tr>
+          </table>
+        </td></tr>
+        ${description ? `<tr><td style="padding:18px 32px 0 32px;font-family:${BODY};font-size:14px;line-height:1.6;color:${MUTED};">${description}</td></tr>` : ''}
+        <tr><td style="padding:26px 32px 0 32px;">${button(`${clientUrl}/fleet`, 'Pick a car', { hex: INK, on: '#FFFFFF' })}</td></tr>`,
+      footer: `Enter ${code} at checkout. You received this because you signed up for Driveaway offers.`,
+    }),
+  };
+};
+
+const sendDiscountBroadcastEmail = async (opts) => {
   try {
     const transporter = createTransporter();
     if (!transporter) return;
-    if (!recipientEmail || !discountCode) return;
-
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const fleetUrl = `${clientUrl}/fleet`;
-
-    const mailOptions = {
-      from: `"Driveaway Special Deals" <${process.env.EMAIL_USER}>`,
-      to: recipientEmail,
-      subject: `🎉 Special Offer: ${percentageOff}% OFF with code ${discountCode}! - Driveaway`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
-            .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
-            .header { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; padding: 36px 24px; text-align: center; }
-            .logo { font-size: 26px; font-weight: 800; color: #ffffff; margin: 0; }
-            .offer-badge { display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 800; margin-top: 14px; text-transform: uppercase; letter-spacing: 1px; }
-            .content { padding: 32px 24px; text-align: center; }
-            .headline { font-size: 26px; font-weight: 800; color: #0f172a; margin-top: 0; }
-            .desc { color: #475569; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
-            .coupon-box { background: #eef2ff; border: 2px dashed #6366f1; border-radius: 12px; padding: 20px; margin: 20px auto; max-width: 400px; }
-            .coupon-code { font-size: 28px; font-weight: 900; color: #4338ca; letter-spacing: 2px; }
-            .coupon-sub { font-size: 14px; font-weight: 600; color: #4f46e5; margin-top: 6px; }
-            .btn { display: inline-block; background: #4f46e5; color: #ffffff !important; text-decoration: none; padding: 14px 34px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-top: 16px; }
-            .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1 class="logo">🚗 DRIVEAWAY</h1>
-              <p style="margin: 6px 0 0 0; color: #e0e7ff; font-size: 14px;">Exclusive Discount Announcement</p>
-              <div class="offer-badge">Limited Time Offer</div>
-            </div>
-
-            <div class="content">
-              <h2 class="headline">Unlock ${percentageOff}% OFF Your Next Drive! 🚀</h2>
-              <p class="desc">
-                ${recipientName ? `Hi <strong>${recipientName}</strong>, ` : ''}
-                Whether you're planning a weekend getaway or driving your dream supercar, here is a special gift from Driveaway to make your journey extraordinary.
-              </p>
-
-              <div class="coupon-box">
-                <div style="font-size: 12px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Use Promo Code</div>
-                <div class="coupon-code">${discountCode}</div>
-                <div class="coupon-sub">
-                  Get ${percentageOff}% Instant Discount ${maxDiscount ? `(Up to ₹${maxDiscount})` : ''}
-                </div>
-              </div>
-
-              ${description ? `<p style="font-size: 14px; color: #64748b; font-style: italic;">"${description}"</p>` : ''}
-
-              <a href="${fleetUrl}" class="btn">Explore Fleet & Apply Code →</a>
-
-              <p style="font-size: 12px; color: #94a3b8; margin-top: 24px;">
-                Apply code <strong>${discountCode}</strong> at checkout. Offer valid for a limited period across eligible fleet vehicles in Ahmedabad.
-              </p>
-            </div>
-
-            <div class="footer">
-              <p style="margin: 0 0 6px 0;">Driveaway Car Rentals • Ahmedabad, Gujarat</p>
-              <p style="margin: 0;">You received this email because you are a registered user or subscriber of Driveaway.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✉️ Discount broadcast email sent to ${recipientEmail} with code ${discountCode} (Message ID: ${info.messageId})`);
+    if (!opts.recipientEmail || !opts.discountCode) return;
+    const { subject, html } = buildDiscountBroadcastEmail(opts);
+    const info = await transporter.sendMail({ from: `"Driveaway Offers" <${process.env.EMAIL_USER}>`, to: opts.recipientEmail, subject, html });
+    console.log(`✉️ Discount broadcast email sent to ${opts.recipientEmail} with code ${opts.discountCode} (Message ID: ${info.messageId})`);
   } catch (error) {
-    console.error(`❌ Error sending discount broadcast email to ${recipientEmail}:`, error.message);
+    console.error(`❌ Error sending discount broadcast email to ${opts.recipientEmail}:`, error.message);
+  }
+};
+
+/**
+ * Contact form: auto-reply to the visitor + a copy for the team
+ */
+const buildContactEmails = (raw) => {
+  const paint = paintFor(null);
+  const name = escapeHtml(raw.name);
+  const email = escapeHtml(raw.email);
+  const phone = escapeHtml(raw.phone);
+  const subject = escapeHtml(raw.subject);
+  const message = escapeHtml(raw.message).replace(/\n/g, '<br>');
+  const quote = `<tr><td style="padding:22px 32px 0 32px;">
+      <div style="border-left:4px solid ${INK};padding:4px 0 4px 16px;font-family:${BODY};font-size:14px;line-height:1.6;color:${MUTED};">${message}</div>
+    </td></tr>`;
+
+  return {
+    reply: {
+      subject: 'We have your message',
+      html: layout({
+        paint,
+        eyebrow: 'Support',
+        title: 'Message<br>received.',
+        preheader: 'Our Ahmedabad team will get back to you shortly.',
+        intro: `Thanks, <strong>${name}</strong>. We got your message about <strong>${subject || 'your enquiry'}</strong> and our Ahmedabad team will reply shortly (7:00 AM to 10:00 PM, every day).`,
+        body: quote,
+      }),
+    },
+    team: {
+      subject: `New enquiry from ${raw.name} (${raw.subject || 'General'})`,
+      html: layout({
+        paint,
+        eyebrow: 'Contact form',
+        title: 'New<br>enquiry.',
+        body: section('From', rows([
+          row('Name', name, { strong: true }),
+          row('Email', email),
+          row('Phone', phone || 'Not given'),
+          row('Subject', subject || 'General'),
+        ])) + quote,
+        footer: 'Sent from the contact form on the Driveaway website.',
+      }),
+    },
+  };
+};
+
+const sendContactMessageEmail = async (raw) => {
+  try {
+    const transporter = createTransporter();
+    if (!transporter) return;
+    const { reply, team } = buildContactEmails(raw);
+    await transporter.sendMail({ from: `"Driveaway Support" <${process.env.EMAIL_USER}>`, to: raw.email, ...reply });
+    await transporter.sendMail({ from: `"Driveaway Contact Form" <${process.env.EMAIL_USER}>`, to: process.env.EMAIL_USER, replyTo: raw.email, ...team });
+    console.log(`✉️ Contact auto-reply sent to ${raw.email} and team notified.`);
+  } catch (error) {
+    console.error('❌ Error sending contact message emails:', error.message);
   }
 };
 
@@ -499,5 +416,10 @@ module.exports = {
   sendBookingStatusUpdateEmail,
   sendCarAvailabilityEmail,
   sendDiscountBroadcastEmail,
+  // builders (used to preview the templates without sending)
+  buildBookingConfirmationEmail,
+  buildBookingStatusUpdateEmail,
+  buildCarAvailabilityEmail,
+  buildDiscountBroadcastEmail,
+  buildContactEmails,
 };
-

@@ -133,7 +133,7 @@ exports.createBooking = async (req, res) => {
     user.loyaltyPoints += pointsEarned;
     await user.save();
 
-    const populatedBooking = await Booking.findById(booking._id).populate('car', 'name company images.main dailyRate');
+    const populatedBooking = await Booking.findById(booking._id).populate('car', 'name company type images.main dailyRate');
 
     // Send confirmation email asynchronously (does not block response)
     sendBookingConfirmationEmail({
@@ -200,7 +200,7 @@ exports.cancelBooking = async (req, res) => {
     triggerCarAvailabilityAlerts(booking.car).catch(err => console.error(err));
     
     // Notify customer about cancellation
-    const populated = await Booking.findById(booking._id).populate('car', 'name company');
+    const populated = await Booking.findById(booking._id).populate('car', 'name company type');
     sendBookingStatusUpdateEmail({ booking: populated || booking, newStatus: 'Cancelled' }).catch(err => console.error(err));
 
     res.json(booking);
@@ -280,7 +280,7 @@ exports.updateBookingStatus = async (req, res) => {
       req.params.id,
       { status: req.body.status },
       { new: true }
-    ).populate('car', 'name');
+    ).populate('car', 'name company type');
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
     if (['Completed', 'Cancelled'].includes(req.body.status) && booking.car) {
       await Car.findByIdAndUpdate(booking.car._id, { status: 'Available' });

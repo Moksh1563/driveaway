@@ -69,7 +69,7 @@ This creates the 48-car fleet, the demo admin and customer accounts, promo codes
 
 In Render: your service → **Environment** → set `CLIENT_URL` to your Vercel address (no trailing slash) → **Save**. Render redeploys automatically.
 
-Open the Vercel address: the home page should show the paint swatches and cars. Sign in with the demo admin from `server/seed.js` to check the admin panel.
+Open the Vercel address: the home page should show the paint swatches and cars. Sign in as `admin@driveaway.com` with the password `npm run seed` printed, to check the admin panel.
 
 ---
 
@@ -82,7 +82,8 @@ Open the Vercel address: the home page should show the paint swatches and cars. 
 
 ## Security
 
-- `server/seed.js` contains the demo account passwords, so anyone who can read the repository knows them.
-  After seeding, sign in as the admin, open **My garage → Profile**, and change the password. Do the same for the demo customer.
+- Seeding Atlas never uses the public demo passwords: `npm run seed` prints new random passwords for
+  `admin@driveaway.com` and the demo customer (or uses `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD` if you set them).
+  Save them when they are printed. The demo passwords only apply to a database on your own computer.
 - `VITE_SHOW_DEMO_LOGINS=true` puts one-click admin login on the public site. Only turn it on for a presentation, then remove it and redeploy.
 - Never commit `server/.env`. It is already in `.gitignore`.

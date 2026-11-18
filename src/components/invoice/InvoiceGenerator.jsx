@@ -1,4 +1,5 @@
 // jsPDF is loaded on demand (only when an invoice is downloaded) to keep page loads fast
+import { PAINTS, PAINT_ORDER, carTitle } from '../../theme/paints';
 
 /**
  * Convert number to words in Indian Rupees format (Lakhs, Crores)
@@ -50,9 +51,7 @@ export const extractBookingInfo = (booking, car) => {
 
   const carCompany = (car?.company || booking?.car?.company || '').trim();
   const carModel = (car?.name || booking?.car?.name || 'Rental Vehicle').trim();
-  const fullVehicleName = carModel.toLowerCase().startsWith(carCompany.toLowerCase())
-    ? carModel
-    : `${carCompany} ${carModel}`.trim();
+  const fullVehicleName = carTitle({ name: carModel, company: carCompany }) || 'Rental Vehicle';
 
   const totalDays = Math.max(1, Number(booking?.totalDays) || 1);
   const dailyRate = Number(booking?.dailyRateSnapshot || car?.dailyRate || booking?.car?.dailyRate || 0);
@@ -105,270 +104,175 @@ export const extractBookingInfo = (booking, car) => {
 };
 
 /**
- * Generate PDF Tax Invoice
+ * Generate the PDF tax invoice in the Lacquer design: a band in the car category's paint,
+ * the eight-paint strip, hairline rules and the total set in the same paint. White page so it prints well.
  */
+const rgbOf = (spaceSeparated) => spaceSeparated.split(' ').map(Number);
+const INK = [17, 17, 19];
+const MUTED = [107, 104, 98];
+const LINE = [214, 210, 203];
+// The PDF's built-in fonts have no rupee glyph, so amounts use "Rs".
+const rs = (n) => {
+  const v = Number(n || 0);
+  const digits = Number.isInteger(v) ? 0 : 2;
+  return `Rs ${v.toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+};
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A');
+
 export const generatePDF = async (booking, car) => {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+  const [{ jsPDF }, { autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
   ]);
   const info = extractBookingInfo(booking, car);
-  const doc = new jsPDF();
-  const pageW = doc.internal.pageSize.width;
+  const type = car?.type || booking?.car?.type;
+  const paint = PAINTS[type] ? { ...PAINTS[type], type } : { no: '00', name: 'Driveaway Ink', rgb: '17 17 19', on: '255 255 255', type: null };
+  const P = rgbOf(paint.rgb);
+  const ON = rgbOf(paint.on);
 
-  // ── HEADER ──────────────────────────────────────────────
-  doc.setFillColor(15, 15, 15);
-  doc.rect(0, 0, pageW, 46, 'F');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 16; // page margin
 
-  // Amber accent line
-  doc.setFillColor(245, 158, 11);
-  doc.rect(0, 46, pageW, 2.5, 'F');
+  const label = (value, x, y, color = MUTED, align = 'left') => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setCharSpace(0.6);
+    doc.setTextColor(...color);
+    doc.text(value.toUpperCase(), x, y, { align });
+    doc.setCharSpace(0);
+  };
+  const text = (value, x, y, { size = 9.5, bold = false, color = INK, align = 'left' } = {}) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(...color);
+    doc.text(String(value), x, y, { align });
+  };
+  const hairline = (y) => {
+    doc.setDrawColor(...LINE);
+    doc.setLineWidth(0.25);
+    doc.line(M, y, W - M, y);
+  };
+  const strip = (y, h) => {
+    const w = W / PAINT_ORDER.length;
+    PAINT_ORDER.forEach((t, i) => {
+      doc.setFillColor(...rgbOf(PAINTS[t].rgb));
+      doc.rect(i * w, y, w + 0.2, h, 'F');
+    });
+  };
 
-  // Brand Name
-  doc.setTextColor(255, 255, 255);
+  // ── Paint band ─────────────────────────────────────────
+  doc.setFillColor(...P);
+  doc.rect(0, 0, W, 54, 'F');
+  text('DRIVEAWAY', M, 17, { size: 15, bold: true, color: ON });
+  label('Tax invoice', W - M, 12, ON, 'right');
+  text(`#${info.invoiceNumber}`, W - M, 18, { size: 10, bold: true, color: ON, align: 'right' });
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(26);
-  doc.text('DRIVE', 15, 25);
-  doc.setTextColor(245, 158, 11);
-  doc.text('AWAY', 15 + doc.getTextWidth('DRIVE'), 25);
+  let carLines = doc.splitTextToSize(info.fullVehicleName.toUpperCase(), W - 2 * M);
+  if (carLines.length > 1) {
+    doc.setFontSize(21);
+    carLines = doc.splitTextToSize(info.fullVehicleName.toUpperCase(), W - 2 * M).slice(0, 2);
+  }
+  doc.setTextColor(...ON);
+  doc.text(carLines, M, carLines.length > 1 ? 31 : 39);
+  if (paint.type) label(`Paint ${paint.no}  ·  ${paint.type}  ·  ${paint.name}`, M, 47, ON);
+  strip(54, 2.2);
 
-  doc.setTextColor(160, 160, 160);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.text('PREMIUM & LUXURY CAR RENTALS — AHMEDABAD', 15, 33);
-  doc.text('GSTIN: 24DRWAY1234A1Z5 | State Code: 24 (Gujarat)', 15, 39);
-
-  // Invoice Metadata
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text('TAX INVOICE', pageW - 15, 19, { align: 'right' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(245, 158, 11);
-  doc.text(`#${info.invoiceNumber}`, pageW - 15, 27, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(180, 180, 180);
-  doc.text(`Date: ${new Date(info.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, pageW - 15, 34, { align: 'right' });
-  doc.text(`Place of Supply: Ahmedabad (24)`, pageW - 15, 40, { align: 'right' });
-
-  // ── COMPANY & CUSTOMER INFO ──────────────────────────────
-  let y = 55;
-  doc.setFillColor(24, 24, 27);
-  doc.roundedRect(10, y, 92, 44, 3, 3, 'F');
-  doc.roundedRect(108, y, 92, 44, 3, 3, 'F');
-
-  // Box 1: FROM
-  doc.setTextColor(245, 158, 11);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.text('ISSUED BY', 15, y + 8);
-
-  doc.setTextColor(240, 240, 240);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.text('Driveaway Luxury Rentals Pvt. Ltd.', 15, y + 16);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(160, 160, 160);
-  const companyLines = [
-    'Shop No. 12, SG Highway, Bodakdev',
-    'Ahmedabad — 380054, Gujarat, India',
-    'Phone: +91 79-2630-0000',
-    'Email: info@driveaway.in | driveaway.in',
-  ];
-  companyLines.forEach((line, i) => doc.text(line, 15, y + 22 + (i * 4.8)));
-
-  // Box 2: BILLED TO (Dynamic Customer Details)
-  doc.setTextColor(245, 158, 11);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.text('BILLED TO (CUSTOMER)', 113, y + 8);
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  // Auto-truncate or fit long names nicely
-  const displayName = info.customerName.length > 28 ? info.customerName.substring(0, 26) + '...' : info.customerName;
-  doc.text(displayName, 113, y + 16);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(160, 160, 160);
-  const customerDetails = [
-    info.customerPhone ? `Phone: ${info.customerPhone}` : null,
-    info.customerEmail ? `Email: ${info.customerEmail}` : null,
-    info.licenseNumber ? `Driver License: ${info.licenseNumber}` : null,
-    info.address ? `Address: ${info.address.substring(0, 32)}` : 'Location: Ahmedabad, Gujarat',
+  // ── Issued by / Billed to ──────────────────────────────
+  let y = 68;
+  label('Issued by', M, y);
+  label('Billed to', W / 2 + 4, y);
+  text('Driveaway Luxury Rentals Pvt. Ltd.', M, y + 7, { bold: true });
+  text(info.customerName.length > 34 ? info.customerName.slice(0, 32) + '...' : info.customerName, W / 2 + 4, y + 7, { bold: true });
+  const issuer = ['Shop No. 12, SG Highway, Bodakdev', 'Ahmedabad 380054, Gujarat', 'GSTIN 24DRWAY1234A1Z5', '+91 79-2630-0000 · info@driveaway.in'];
+  const billed = [
+    info.customerPhone !== 'N/A' ? info.customerPhone : null,
+    info.customerEmail !== 'N/A' ? info.customerEmail : null,
+    info.licenseNumber ? `Licence ${info.licenseNumber}` : null,
+    info.address ? info.address.slice(0, 44) : 'Ahmedabad, Gujarat',
   ].filter(Boolean);
-  customerDetails.forEach((line, i) => doc.text(line, 113, y + 22 + (i * 4.8)));
+  issuer.forEach((l, i) => text(l, M, y + 13 + i * 5, { size: 8.5, color: MUTED }));
+  billed.forEach((l, i) => text(l, W / 2 + 4, y + 13 + i * 5, { size: 8.5, color: MUTED }));
 
-  // ── VEHICLE & RESERVATION DETAILS ────────────────────────
-  y = 106;
-  doc.setFillColor(24, 24, 27);
-  doc.roundedRect(10, y, 190, 28, 3, 3, 'F');
-
-  doc.setTextColor(245, 158, 11);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.text('BOOKED VEHICLE', 15, y + 7);
-  doc.text('PICKUP DATE & TIME', 75, y + 7);
-  doc.text('RETURN DATE', 125, y + 7);
-  doc.text('DURATION', 165, y + 7);
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  const displayCarName = info.fullVehicleName.length > 25 ? info.fullVehicleName.substring(0, 23) + '..' : info.fullVehicleName;
-  doc.text(displayCarName, 15, y + 16);
-
-  const pickupStr = info.pickupDate ? new Date(info.pickupDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-  const returnStr = info.returnDate ? new Date(info.returnDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-  doc.text(pickupStr, 75, y + 16);
-  doc.text(returnStr, 125, y + 16);
-  doc.text(`${info.totalDays} Day${info.totalDays > 1 ? 's' : ''}`, 165, y + 16);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(160, 160, 160);
-  doc.text(`Hub: ${info.pickupLocation}`, 15, y + 23);
-  doc.text(`Rate: ₹${info.dailyRate.toLocaleString('en-IN')}/day`, 75, y + 23);
-
-  // ── COST TABLE ────────────────────────────────────────────
-  y = 140;
-  const tableRows = [
-    [
-      '1',
-      `Base Rental Fare — ${info.fullVehicleName}`,
-      `${info.totalDays} Day${info.totalDays > 1 ? 's' : ''} × ₹${info.dailyRate.toLocaleString('en-IN')}`,
-      `₹${info.baseRental.toLocaleString('en-IN')}`,
-    ],
+  // ── The drive ──────────────────────────────────────────
+  y = 102;
+  hairline(y);
+  const cols = [
+    ['Pickup hub', info.pickupLocation],
+    ['Pickup', fmtDate(info.pickupDate)],
+    ['Return', fmtDate(info.returnDate)],
+    ['Duration', `${info.totalDays} day${info.totalDays > 1 ? 's' : ''}`],
+    ['Issued', fmtDate(info.createdAt)],
   ];
+  const cw = (W - 2 * M) / cols.length;
+  cols.forEach(([k, v], i) => {
+    label(k, M + i * cw, y + 8);
+    text(v.length > 20 ? v.slice(0, 19) + '...' : v, M + i * cw, y + 14, { size: 9, bold: true });
+  });
+  hairline(y + 20);
 
-  if (info.discountAmount > 0) {
-    tableRows.push([
-      '2',
-      `Promotional Discount (Promo Code: ${info.discountCode || 'SPECIAL'})`,
-      'Instant Discount',
-      `-₹${info.discountAmount.toLocaleString('en-IN')}`,
-    ]);
-  }
-
-  if (info.loyaltyDiscount > 0) {
-    tableRows.push([
-      String(tableRows.length + 1),
-      `Loyalty Points Redemption (${info.loyaltyPointsUsed} Points Used)`,
-      'Loyalty Benefit',
-      `-₹${info.loyaltyDiscount.toLocaleString('en-IN')}`,
-    ]);
-  }
+  // ── Fare table ─────────────────────────────────────────
+  const body = [[`${info.fullVehicleName}, base fare`, `${info.totalDays} x ${rs(info.dailyRate)}`, rs(info.baseRental)]];
+  if (info.discountAmount > 0) body.push([`Promo code ${info.discountCode || ''}`.trim(), 'Discount', `- ${rs(info.discountAmount)}`]);
+  if (info.loyaltyDiscount > 0) body.push([`Loyalty points (${info.loyaltyPointsUsed})`, 'Redeemed', `- ${rs(info.loyaltyDiscount)}`]);
+  body.push(['Taxable value', '', rs(info.taxableAmount)]);
+  body.push(['CGST 9%', '', rs(info.cgst)]);
+  body.push(['SGST 9%', '', rs(info.sgst)]);
 
   autoTable(doc, {
-    startY: y,
-    head: [['#', 'Description of Services', 'Billing Details', 'Amount (INR)']],
-    body: tableRows,
+    startY: y + 25,
+    head: [['DESCRIPTION', 'DETAILS', 'AMOUNT']],
+    body,
     theme: 'plain',
-    headStyles: {
-      fillColor: [245, 158, 11],
-      textColor: [0, 0, 0],
-      fontStyle: 'bold',
-      fontSize: 8.5,
-      cellPadding: 4,
+    margin: { left: M, right: M },
+    styles: { font: 'helvetica', fontSize: 9, textColor: INK, cellPadding: { top: 3, bottom: 3, left: 0, right: 0 }, lineColor: LINE },
+    headStyles: { fontSize: 7, fontStyle: 'bold', textColor: MUTED, lineWidth: { bottom: 0.25 } },
+    bodyStyles: { lineWidth: { bottom: 0.25 } },
+    columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 44, textColor: MUTED }, 2: { halign: 'right', fontStyle: 'bold' } },
+    didParseCell: (d) => {
+      if (d.section === 'head' && d.column.index === 2) d.cell.styles.halign = 'right';
+      if (d.section === 'body' && String(d.cell.raw).startsWith('- ')) d.cell.styles.textColor = [21, 128, 61];
     },
-    bodyStyles: {
-      fillColor: [24, 24, 27],
-      textColor: [220, 220, 220],
-      fontSize: 8,
-      cellPadding: 4.5,
-    },
-    alternateRowStyles: {
-      fillColor: [18, 18, 20],
-    },
-    columnStyles: {
-      0: { cellWidth: 10, halign: 'center' },
-      1: { cellWidth: 95 },
-      2: { cellWidth: 50 },
-      3: { cellWidth: 35, halign: 'right' },
-    },
-    margin: { left: 10, right: 10 },
   });
 
-  // TOTAL & TAX BREAKDOWN BANNER
-  const finalY = doc.lastAutoTable.finalY + 3;
+  // ── Total in the car's paint ───────────────────────────
+  y = doc.lastAutoTable.finalY + 6;
+  doc.setFillColor(...P);
+  doc.roundedRect(M, y, W - 2 * M, 20, 3, 3, 'F');
+  label(info.paymentCompleted ? 'Total paid (GST included)' : 'Total due at pickup (GST included)', M + 7, y + 11.5, ON);
+  text(rs(info.totalAmount), W - M - 7, y + 13, { size: 17, bold: true, color: ON, align: 'right' });
 
-  // Amber Total Bar
-  doc.setFillColor(245, 158, 11);
-  doc.roundedRect(10, finalY, 190, 13, 2, 2, 'F');
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('TOTAL INVOICE AMOUNT (PAID)', 16, finalY + 8.5);
-  doc.setFontSize(13);
-  doc.text(`₹${info.totalAmount.toLocaleString('en-IN')}`, pageW - 16, finalY + 8.5, { align: 'right' });
+  y += 27;
+  label('Amount in words', M, y);
+  text(numberToWordsINR(info.totalAmount), M, y + 6, { size: 9 });
 
-  // Amount in Words
-  let detailsY = finalY + 19;
-  doc.setTextColor(245, 158, 11);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.text('AMOUNT IN WORDS:', 10, detailsY);
-  doc.setTextColor(230, 230, 230);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.text(numberToWordsINR(info.totalAmount), 46, detailsY);
+  // ── Payment ────────────────────────────────────────────
+  y += 13;
+  hairline(y);
+  const pay = [
+    ['Payment method', info.paymentMethod],
+    ['Reference', info.paymentId.slice(0, 26)],
+    ['Status', info.paymentCompleted ? 'PAID' : 'PAY AT PICKUP'],
+  ];
+  const pw = (W - 2 * M) / 3;
+  pay.forEach(([k, v], i) => {
+    label(k, M + i * pw, y + 8);
+    text(v, M + i * pw, y + 14, { size: 9.5, bold: true, color: i === 2 ? (info.paymentCompleted ? [21, 128, 61] : [180, 83, 9]) : INK });
+  });
+  hairline(y + 20);
 
-  // Tax breakdown line
-  detailsY += 6;
-  doc.setTextColor(150, 150, 150);
-  doc.setFontSize(7.5);
-  doc.text(
-    `*Includes 18% GST (Taxable: ₹${info.taxableAmount.toLocaleString('en-IN')} | CGST 9%: ₹${info.cgst.toLocaleString('en-IN')} | SGST 9%: ₹${info.sgst.toLocaleString('en-IN')})`,
-    10,
-    detailsY
-  );
-
-  // Payment Mode and Status Card
-  detailsY += 7;
-  doc.setFillColor(24, 24, 27);
-  doc.roundedRect(10, detailsY, 190, 16, 2, 2, 'F');
-
-  doc.setTextColor(245, 158, 11);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('PAYMENT METHOD', 15, detailsY + 5.5);
-  doc.text('TRANSACTION ID / REF', 80, detailsY + 5.5);
-  doc.text('PAYMENT STATUS', 150, detailsY + 5.5);
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text(info.paymentMethod, 15, detailsY + 11.5);
-  doc.text(info.paymentId.substring(0, 26), 80, detailsY + 11.5);
-
-  if (info.paymentCompleted) {
-    doc.setTextColor(34, 197, 94); // Emerald Green
-    doc.text('PAID / CONFIRMED', 150, detailsY + 11.5);
-  } else {
-    doc.setTextColor(245, 158, 11); // Amber
-    doc.text('PAY AT PICKUP / PENDING', 150, detailsY + 11.5);
+  // ── Footer: flows under the content; moves to a new page if it would not fit ──
+  strip(H - 6, 6);
+  if (y + 48 > H) { // the payment block ends at y + 20; the footer needs the last ~28mm
+    doc.addPage();
+    strip(H - 6, 6);
   }
+  text('Thank you for driving with Driveaway. This is a computer-generated tax invoice and needs no signature.', M, H - 20, { size: 8, color: MUTED });
+  text('Questions? +91 79-2630-0000 · info@driveaway.in · Place of supply: Ahmedabad, Gujarat (24)', M, H - 15, { size: 8, color: MUTED });
 
-  // ── FOOTER ───────────────────────────────────────────────
-  const footerY = doc.internal.pageSize.height - 22;
-  doc.setFillColor(245, 158, 11);
-  doc.rect(0, footerY - 2, pageW, 0.5, 'F');
-
-  doc.setTextColor(160, 160, 160);
-  doc.setFontSize(7.5);
-  doc.text('Thank you for driving with Driveaway! This is an official computer-generated Tax Invoice.', pageW / 2, footerY + 5, { align: 'center' });
-  doc.text('Need support? Call +91 79-2630-0000 or email info@driveaway.in | Ahmedabad, Gujarat', pageW / 2, footerY + 10, { align: 'center' });
-  doc.setTextColor(245, 158, 11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Drive Safe • Drive Smart • DriveAway', pageW / 2, footerY + 15, { align: 'center' });
-
-  // Save PDF
   doc.save(`Driveaway_Invoice_${info.invoiceNumber}.pdf`);
 };
 

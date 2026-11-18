@@ -34,8 +34,9 @@ export const rupees = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 export const pluralLower = (type) => (type === type.toUpperCase() ? `${type}s` : plural(type).toLowerCase());
 
 /** "McLaren Senna" stays as is; "Spectre" from Rolls-Royce becomes "Rolls-Royce Spectre". */
+const firstWord = (s) => s.toLowerCase().split(/[\s-]/)[0];
 export const carTitle = (car) => {
   const name = (car?.name || '').trim();
   const company = (car?.company || '').trim();
-  return company && !name.toLowerCase().startsWith(company.toLowerCase()) ? `${company} ${name}` : name;
+  return company && firstWord(name) !== firstWord(company) ? `${company} ${name}` : name;
 };
