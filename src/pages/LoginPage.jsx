@@ -1,20 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight, Shield, User } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import AuthShell from '../components/layout/AuthShell';
-
-// Demo accounts from the project's seed data (server/seed.js), for presentations.
-// Shown in development; on a deployed site only when VITE_SHOW_DEMO_LOGINS=true,
-// because they let anyone sign in as the seeded admin.
-const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGINS === 'true';
-const DEMO = [
-  { label: 'Admin account', email: 'admin@driveaway.com', password: 'REMOVED-PASSWORD', icon: Shield },
-  { label: 'Customer account', email: 'customer@example.com', password: 'REMOVED-PASSWORD', icon: User },
-];
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -95,30 +86,6 @@ export default function LoginPage() {
         </p>
       </form>
 
-      {SHOW_DEMO && (
-      <div className="mt-10 border-t border-line pt-6">
-        <p className="field-label">Demo accounts</p>
-        <div className="grid gap-2">
-          {DEMO.map(({ label, email, password, icon: Icon }) => (
-            <button
-              key={email}
-              type="button"
-              onClick={() => { setForm({ email, password }); setError(''); }}
-              className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-3 text-left transition-colors hover:border-ink"
-            >
-              <span className="flex items-center gap-3">
-                <Icon className="h-4 w-4 text-muted" />
-                <span>
-                  <span className="block text-sm font-semibold">{label}</span>
-                  <span className="block text-xs text-muted">{email}</span>
-                </span>
-              </span>
-              <span className="code-label text-[11px] text-muted">Fill in</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      )}
     </AuthShell>
   );
 }

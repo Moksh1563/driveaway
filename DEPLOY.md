@@ -60,7 +60,6 @@ This creates the 48-car fleet, the demo admin and customer accounts, promo codes
 3. Framework is detected as **Vite**; leave the build settings as they are.
 4. Under **Environment Variables** add:
    - `VITE_API_BASE_URL` = your Render URL + `/api`, e.g. `https://driveaway-api.onrender.com/api`
-   - optional, for presentations: `VITE_SHOW_DEMO_LOGINS` = `true` (shows the one-click demo account buttons; see Security below)
 5. Click **Deploy**. Copy the site address, e.g. `https://driveaway.vercel.app`.
 
 ---
@@ -85,5 +84,4 @@ Open the Vercel address: the home page should show the paint swatches and cars. 
 - Seeding Atlas never uses the public demo passwords: `npm run seed` prints new random passwords for
   `admin@driveaway.com` and the demo customer (or uses `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD` if you set them).
   Save them when they are printed. The demo passwords only apply to a database on your own computer.
-- `VITE_SHOW_DEMO_LOGINS=true` puts one-click admin login on the public site. Only turn it on for a presentation, then remove it and redeploy.
 - Never commit `server/.env`. It is already in `.gitignore`.
