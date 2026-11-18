@@ -277,50 +277,55 @@ export const generatePDF = async (booking, car) => {
 };
 
 /**
- * Generate formatted WhatsApp invoice message
+ * The public website address used in shared messages. Set VITE_SITE_URL on Vercel to pin it;
+ * otherwise it is the address of the site the message is sent from (your Vercel URL when live).
+ */
+export const siteUrl = () =>
+  (import.meta.env.VITE_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/, '');
+
+// A coloured square per paint, so the message carries the car's category colour into WhatsApp
+const PAINT_SWATCH = { Hypercar: '🟦', Supercar: '🟥', Luxury: '🟩', SUV: '🟨', Electric: '⚡', Sports: '🟧', Sedan: '⬛', Hatchback: '🟪' };
+
+/**
+ * Generate the WhatsApp invoice message (WhatsApp formatting: *bold*, _italic_)
  */
 export const generateWhatsAppInvoiceMessage = (booking, car) => {
   const info = extractBookingInfo(booking, car);
-  const pickupDate = info.pickupDate ? new Date(info.pickupDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-  const returnDate = info.returnDate ? new Date(info.returnDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-  const paymentStatusText = info.paymentCompleted ? '✓ Paid & Confirmed' : '⏳ Pay at Pickup / Pending';
+  const type = car?.type || booking?.car?.type;
+  const paint = PAINTS[type];
+  const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  const days = `${info.totalDays} day${info.totalDays > 1 ? 's' : ''}`;
+  const site = siteUrl();
 
-  let discountText = '';
-  if (info.discountAmount > 0) {
-    discountText = `\n• *Promo Discount (${info.discountCode || 'Promo'}):* -₹${info.discountAmount.toLocaleString('en-IN')}`;
-  }
-  if (info.loyaltyDiscount > 0) {
-    discountText += `\n• *Loyalty Discount (${info.loyaltyPointsUsed} pts):* -₹${info.loyaltyDiscount.toLocaleString('en-IN')}`;
-  }
+  const fare = [
+    `${inr(info.dailyRate)} × ${days}: ${inr(info.baseRental)}`,
+    info.discountAmount > 0 ? `Promo ${info.discountCode || ''}: −${inr(info.discountAmount)}`.replace('  ', ' ') : null,
+    info.loyaltyDiscount > 0 ? `Loyalty points (${info.loyaltyPointsUsed}): −${inr(info.loyaltyDiscount)}` : null,
+    `GST 18% included (CGST ${inr(info.cgst)} + SGST ${inr(info.sgst)})`,
+  ].filter(Boolean);
 
-  return `🚗 *DRIVEAWAY RENTALS — OFFICIAL TAX INVOICE*
-━━━━━━━━━━━━━━━━━━━━
-📄 *Invoice #:* ${info.invoiceNumber}
-📅 *Date:* ${new Date(info.createdAt).toLocaleDateString('en-IN')}
-
-👤 *Customer:* ${info.customerName}
-📞 *Phone:* ${info.customerPhone}
-🚘 *Vehicle:* ${info.fullVehicleName}
-📍 *Pickup Hub:* ${info.pickupLocation}
-🗓️ *Rental Duration:* ${pickupDate} ➔ ${returnDate} (${info.totalDays} Day${info.totalDays > 1 ? 's' : ''})
-
-💰 *Fare & Charges Breakdown:*
-• Base Rental Rate: ₹${info.dailyRate.toLocaleString('en-IN')}/day (${info.totalDays} days = ₹${info.baseRental.toLocaleString('en-IN')})${discountText}
-• *Total Amount Paid:* ₹${info.totalAmount.toLocaleString('en-IN')}
-• *In Words:* ${numberToWordsINR(info.totalAmount)}
-• *Taxes:* Inclusive of 18% GST (CGST ₹${info.cgst.toLocaleString('en-IN')} + SGST ₹${info.sgst.toLocaleString('en-IN')})
-
-💳 *Payment Information:*
-• Method: ${info.paymentMethod}
-• Status: ${paymentStatusText}
-• Ref ID: ${info.paymentId}
-
-━━━━━━━━━━━━━━━━━━━━
-📍 *Driveaway Bodakdev, SG Highway, Ahmedabad*
-📞 *Customer Support:* +91 79-2630-0000
-🌐 *Website:* driveaway.in
-━━━━━━━━━━━━━━━━━━━━
-_Drive Safe • Drive Smart • DriveAway_ ✨`;
+  return [
+    `*DRIVEAWAY* · Tax invoice ${info.invoiceNumber}`,
+    paint ? `${PAINT_SWATCH[type]} Paint ${paint.no} · ${type} · ${paint.name}` : null,
+    '',
+    `*${info.fullVehicleName.toUpperCase()}*`,
+    `${fmtDate(info.pickupDate)} → ${fmtDate(info.returnDate)} (${days})`,
+    `Pickup hub: ${info.pickupLocation}`,
+    '',
+    '*Fare*',
+    ...fare.map((l) => `• ${l}`),
+    '',
+    `*${info.paymentCompleted ? 'Total paid' : 'Total due at pickup'}: ${inr(info.totalAmount)}*`,
+    `_${numberToWordsINR(info.totalAmount)}_`,
+    `Payment: ${info.paymentMethod} · ${info.paymentCompleted ? 'Paid ✅' : 'Pay at pickup'}${info.paymentCompleted && info.paymentId ? ` · Ref ${info.paymentId}` : ''}`,
+    '',
+    `Billed to ${info.customerName}`,
+    'Bring your driving licence and an original government ID to the hub.',
+    '',
+    site && booking?._id ? `View booking and PDF invoice: ${site}/booking-success/${booking._id}` : null,
+    site ? `Book your next drive: ${site}` : null,
+    'Help: +91 79-2630-0000',
+  ].filter((l) => l !== null).join('\n');
 };
 
 /**

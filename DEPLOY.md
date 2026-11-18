@@ -60,6 +60,7 @@ This creates the 48-car fleet, the demo admin and customer accounts, promo codes
 3. Framework is detected as **Vite**; leave the build settings as they are.
 4. Under **Environment Variables** add:
    - `VITE_API_BASE_URL` = your Render URL + `/api`, e.g. `https://driveaway-api.onrender.com/api`
+   - optional: `VITE_SITE_URL` = your Vercel address (used for links in WhatsApp invoices; without it the site uses its own address)
 5. Click **Deploy**. Copy the site address, e.g. `https://driveaway.vercel.app`.
 
 ---
