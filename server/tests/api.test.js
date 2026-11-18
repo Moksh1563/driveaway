@@ -4,17 +4,26 @@
  *
  * Starts its own server on TEST_PORT against the database in server/.env,
  * with email sending disabled. Creates temporary users/bookings and removes them afterwards.
- * Requires the seeded admin account (npm run seed).
+ * Creates its own temporary admin (random password) directly in the database, so no
+ * real password is needed or stored here.
  */
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const crypto = require('node:crypto');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const User = require('../models/User');
 
 const PORT = process.env.TEST_PORT || 5055;
 const BASE = `http://127.0.0.1:${PORT}/api`;
-const ADMIN = { email: process.env.TEST_ADMIN_EMAIL || 'admin@driveaway.com', password: process.env.TEST_ADMIN_PASSWORD || 'REMOVED-PASSWORD' };
 const stamp = Date.now().toString(36);
+// Throwaway passwords made fresh for every run (letters + digits, so they pass the password rule)
+const PW = `T${crypto.randomBytes(9).toString('hex')}9`;
+const ADMIN = { email: `test_admin_${stamp}@example.com`, password: `A${crypto.randomBytes(9).toString('hex')}7` };
+let tempAdminId;
 
 let server;
 let adminToken;
@@ -60,14 +69,22 @@ before(async () => {
     await new Promise((r) => setTimeout(r, 250));
   }
 
+  assert.ok(process.env.MONGO_URI, 'Set MONGO_URI in server/.env');
+  await mongoose.connect(process.env.MONGO_URI);
+  const admin = await User.create({
+    username: `test_admin_${stamp}`, name: 'Test Admin', email: ADMIN.email, role: 'admin',
+    password: await bcrypt.hash(ADMIN.password, 10),
+  });
+  tempAdminId = admin._id;
+
   const login = await api('POST', '/auth/login', { body: ADMIN });
-  assert.equal(login.status, 200, `admin login failed — run "npm run seed" first. ${JSON.stringify(login.data)}`);
+  assert.equal(login.status, 200, `temporary admin login failed. ${JSON.stringify(login.data)}`);
   adminToken = login.data.token;
 
   for (const key of ['a', 'b']) {
     const email = `test_${key}_${stamp}@example.com`;
     const r = await api('POST', '/auth/register', {
-      body: { username: `test_${key}_${stamp}`, name: `Test ${key.toUpperCase()}`, email, phone: '9876543210', password: 'Passw0rd!' },
+      body: { username: `test_${key}_${stamp}`, name: `Test ${key.toUpperCase()}`, email, phone: '9876543210', password: PW },
     });
     assert.equal(r.status, 201, JSON.stringify(r.data));
     users[key] = { token: r.data.token, id: r.data.user._id, email };
@@ -83,6 +100,8 @@ after(async () => {
     }
     for (const id of created.users) await api('DELETE', `/admin/users/${id}`, { token: adminToken });
   } finally {
+    if (tempAdminId) await User.deleteOne({ _id: tempAdminId });
+    await mongoose.disconnect();
     server?.kill();
   }
 });
@@ -147,7 +166,7 @@ test('non-admin cannot create cars', async () => {
 test('register rejects weak passwords and bad emails', async () => {
   const weak = await api('POST', '/auth/register', { body: { username: `w_${stamp}`, name: 'W', email: `w_${stamp}@example.com`, password: '123' } });
   assert.equal(weak.status, 400);
-  const bad = await api('POST', '/auth/register', { body: { username: `w2_${stamp}`, name: 'W', email: 'not-an-email', password: 'Passw0rd!' } });
+  const bad = await api('POST', '/auth/register', { body: { username: `w2_${stamp}`, name: 'W', email: 'not-an-email', password: PW } });
   assert.equal(bad.status, 400);
 });
 
@@ -163,14 +182,14 @@ test('login rejects NoSQL injection payload', async () => {
 });
 
 test('login with wrong password returns 401', async () => {
-  const r = await api('POST', '/auth/login', { body: { email: users.a.email, password: 'WrongPass1' } });
+  const r = await api('POST', '/auth/login', { body: { email: users.a.email, password: `${PW}x` } });
   assert.equal(r.status, 401);
 });
 
 test('login by email and by username both work', async () => {
-  const byEmail = await api('POST', '/auth/login', { body: { email: users.a.email, password: 'Passw0rd!' } });
+  const byEmail = await api('POST', '/auth/login', { body: { email: users.a.email, password: PW } });
   assert.equal(byEmail.status, 200);
-  const byUsername = await api('POST', '/auth/login', { body: { email: `test_a_${stamp}`, password: 'Passw0rd!' } });
+  const byUsername = await api('POST', '/auth/login', { body: { email: `test_a_${stamp}`, password: PW } });
   assert.equal(byUsername.status, 200);
 });
 

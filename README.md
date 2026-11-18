@@ -45,8 +45,8 @@ npm run seed
 ```
 
 This populates the `driveaway_custom_port` database on port 27018 with:
-- 👤 Admin: `admin@driveaway.com` / `REMOVED-PASSWORD`
-- 👤 User: `customer@example.com` / `REMOVED-PASSWORD` (250 loyalty points)
+- 👤 An admin (`admin@driveaway.com`) and a demo customer (`customer@example.com`). Their passwords are
+  random and printed once when seeding, or set your own with `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD` in `server/.env`.
 - 🚗 10 cars (Honda Civic, Ford Mustang, Hyundai Creta, BMW 3 Series, Maruti Swift, Nissan GT-R, Kia Seltos, Tata Nexon EV, Mercedes C-Class, Tata Harrier)
 - 🎟️ Discount codes: `DRIVEAWAY20`, `NEWUSER10`, `AHMEDABAD15`
 - 📋 3 sample bookings + 1 review

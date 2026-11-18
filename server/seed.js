@@ -14,13 +14,11 @@ const connectDB = require('./config/db');
 const buildFleet = require('./data/buildFleet');
 const crypto = require('crypto');
 
-// The demo passwords below are public (they are in this repository), so they are only used
-// for a database on this computer. Seeding any other database (e.g. Atlas) uses
-// SEED_ADMIN_PASSWORD / SEED_USER_PASSWORD if set, otherwise strong random passwords.
-const isLocalDb = /^mongodb:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(process.env.MONGO_URI || 'mongodb://127.0.0.1');
-const pick = (envName, demo) => process.env[envName] || (isLocalDb ? demo : crypto.randomBytes(12).toString('base64url'));
-const ADMIN_PASSWORD = pick('SEED_ADMIN_PASSWORD', 'REMOVED-PASSWORD');
-const USER_PASSWORD = pick('SEED_USER_PASSWORD', 'REMOVED-PASSWORD');
+// No passwords live in this file. Set SEED_ADMIN_PASSWORD / SEED_USER_PASSWORD in server/.env
+// (never committed) to choose them; otherwise strong random ones are made and printed once.
+const randomPassword = () => `${crypto.randomBytes(12).toString('base64url')}7a`;
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || randomPassword();
+const USER_PASSWORD = process.env.SEED_USER_PASSWORD || randomPassword();
 
 const seedData = async () => {
   try {
@@ -53,7 +51,7 @@ const seedData = async () => {
     });
     console.log('✅ Admin user created');
 
-    const moksh = await User.create({
+    const customer = await User.create({
       username: 'demo_customer',
       email: 'customer@example.com',
       password: userPassword,
@@ -89,7 +87,7 @@ const seedData = async () => {
     // Create sample bookings
     const b1 = await Booking.create({
       invoiceNumber: 'DA-2025-000001',
-      user: moksh._id,
+      user: customer._id,
       car: carByName('Honda Civic Type R')._id,
       customerName: 'Aarav Shah',
       customerEmail: 'customer@example.com',
@@ -110,7 +108,7 @@ const seedData = async () => {
 
     const b2 = await Booking.create({
       invoiceNumber: 'DA-2025-000002',
-      user: moksh._id,
+      user: customer._id,
       car: carByName('Porsche 911 GT3 RS (992)')._id,
       customerName: 'Aarav Shah',
       customerEmail: 'customer@example.com',
@@ -130,7 +128,7 @@ const seedData = async () => {
 
     await Booking.create({
       invoiceNumber: 'DA-2025-000003',
-      user: moksh._id,
+      user: customer._id,
       car: carByName('Volkswagen Golf GTI')._id,
       customerName: 'Aarav Shah',
       customerEmail: 'customer@example.com',
@@ -150,7 +148,7 @@ const seedData = async () => {
     // Create reviews
     await Review.create([
       {
-        user: moksh._id,
+        user: customer._id,
         car: carByName('Honda Civic Type R')._id,
         booking: b1._id,
         rating: 5,
@@ -185,7 +183,9 @@ const seedData = async () => {
     console.log('\n🎉 Database seeded successfully!\n');
     console.log(`📧 Admin Login:  admin@driveaway.com / ${ADMIN_PASSWORD}`);
     console.log(`📧 User Login:   customer@example.com / ${USER_PASSWORD}`);
-    if (!isLocalDb) console.log('⚠️  Save these passwords now: they are not stored anywhere else.');
+    if (!process.env.SEED_ADMIN_PASSWORD || !process.env.SEED_USER_PASSWORD) {
+      console.log('⚠️  Save these passwords now: they are not stored anywhere else.');
+    }
     console.log('🎟️  Discount Codes: DRIVEAWAY20, NEWUSER10, AHMEDABAD15\n');
     process.exit(0);
   } catch (error) {

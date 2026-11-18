@@ -81,7 +81,7 @@ Open the Vercel address: the home page should show the paint swatches and cars. 
 
 ## Security
 
-- Seeding Atlas never uses the public demo passwords: `npm run seed` prints new random passwords for
-  `admin@driveaway.com` and the demo customer (or uses `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD` if you set them).
-  Save them when they are printed. The demo passwords only apply to a database on your own computer.
+- No passwords are stored in this repository. `npm run seed` prints new random passwords for
+  `admin@driveaway.com` and `customer@example.com` (or uses `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD` from your environment).
+  Save them when they are printed.
 - Never commit `server/.env`. It is already in `.gitignore`.
