@@ -72,8 +72,6 @@
 @layer components {
   /* Archivo's width axis carries the voice: expanded for display, condensed for paint codes. */
   .font-wide { font-stretch: 125%; }
-  .font-narrow { font-stretch: 75%; }
-  .font-cond { font-stretch: 62%; }
 
   .display {
     font-stretch: 125%;

@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import { sizedImage } from '../utils/image';
 import { PAINTS, PAINT_ORDER, paintStyle } from '../theme/paints';
 import { HUBS } from '../theme/hubs';
 import Reveal from '../components/ui/Reveal';
@@ -11,12 +10,6 @@ const PROMISES = [
   { title: 'Eight hubs', desc: 'Collect and return at SG Highway, the airport, Vastrapur, Bopal and four more.' },
   { title: 'Support all day', desc: 'Our Ahmedabad team answers calls daily from 7:00 AM to 10:00 PM.' },
   { title: 'Book in minutes', desc: 'Pick the car, the dates and a hub. No hidden charges and free cancellation.' },
-];
-
-const TEAM = [
-  { name: 'Arjun Mehta', role: 'Founder & CEO', img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400', bio: 'Ahmedabad native with over ten years in the automotive industry.' },
-  { name: 'Priya Desai', role: 'Head of Operations', img: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400', bio: 'Makes sure every handover is on time and every car is ready.' },
-  { name: 'Ravi Shah', role: 'Fleet Manager', img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400', bio: 'Keeps every car in the fleet in showroom condition.' },
 ];
 
 export default function AboutPage() {
@@ -41,7 +34,7 @@ export default function AboutPage() {
       </section>
 
       {/* The paint book, full width */}
-      <Reveal as="section" variant="deal" stagger={70} aria-label="Our categories" className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+      <Reveal as="section" variant="deal" stagger={70} aria-label="Our categories" className="overflow-hidden grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
         {PAINT_ORDER.map((t) => (
           <Link
             key={t}
@@ -51,7 +44,7 @@ export default function AboutPage() {
           >
             <span className="code-label text-[11px]">Paint {PAINTS[t].no}</span>
             <span>
-              <span className="block font-wide font-black uppercase tracking-tight text-lg leading-none">{t}</span>
+              <span className="block font-wide font-black uppercase tracking-tight text-[clamp(0.95rem,1.2vw,1.125rem)] leading-none">{t}</span>
               <span className="mt-1 block text-xs">{PAINTS[t].name}</span>
             </span>
           </Link>
@@ -71,29 +64,8 @@ export default function AboutPage() {
         </dl>
       </section>
 
-      {/* Team */}
-      <section className="border-y border-line bg-surface">
-        <div className="page-container py-20 lg:py-24">
-          <h2 className="display text-4xl sm:text-5xl">The people with the keys.</h2>
-          <div className="mt-12 grid gap-8 sm:grid-cols-3">
-            {TEAM.map((m) => (
-              <figure key={m.name}>
-                <div className="aspect-[4/5] overflow-hidden rounded-chip rounded-bl-[64px] bg-ink/5">
-                  <img src={sizedImage(m.img, 600)} alt={m.name} loading="lazy" decoding="async" className="h-full w-full object-cover object-top grayscale transition duration-500 hover:grayscale-0" />
-                </div>
-                <figcaption className="mt-5">
-                  <p className="font-wide font-black uppercase tracking-tight text-lg">{m.name}</p>
-                  <p className="code-label mt-1 text-[12px] text-muted">{m.role}</p>
-                  <p className="mt-3 text-sm text-muted">{m.bio}</p>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Hubs */}
-      <section className="page-container py-20 lg:py-24">
+      <section className="page-container border-t border-line py-20 lg:py-24">
         <div className="grid gap-10 lg:grid-cols-12">
           <h2 className="display text-4xl sm:text-5xl lg:col-span-5">Serving all of Ahmedabad.</h2>
           <ul className="flex flex-wrap content-start gap-2 lg:col-span-7">
