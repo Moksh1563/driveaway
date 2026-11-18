@@ -12,19 +12,102 @@ const safeBooking = (booking) => {
   return obj;
 };
 
+/* ───────────────── Sending ─────────────────
+ * Two ways to send, picked from the environment:
+ *  - BREVO_API_KEY set  -> Brevo's HTTPS API. Use this on Render: its free plan blocks SMTP ports.
+ *  - EMAIL_USER + EMAIL_PASS -> Gmail SMTP (fine on your own computer).
+ * EMAIL_FROM is the sender address (must be verified in Brevo); EMAIL_TEAM gets contact-form copies.
+ */
+const senderEmail = () => process.env.EMAIL_FROM || process.env.EMAIL_USER || '';
+const teamEmail = () => process.env.EMAIL_TEAM || senderEmail();
+const from = (name) => `"${name}" <${senderEmail()}>`;
+
+const emailMode = () => {
+  if (process.env.BREVO_API_KEY) return 'brevo';
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) return 'smtp';
+  return null;
+};
+
+// Last send result, shown to admins so a broken setup is visible instead of silent
+const lastSend = { ok: null, at: null, error: null };
+const track = async (promise) => {
+  try {
+    const info = await promise;
+    Object.assign(lastSend, { ok: true, at: new Date().toISOString(), error: null });
+    return info;
+  } catch (err) {
+    Object.assign(lastSend, { ok: false, at: new Date().toISOString(), error: err.message });
+    throw err;
+  }
+};
+
+const parseAddress = (value) => {
+  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(value || '');
+  return m ? { name: m[1].trim() || undefined, email: m[2].trim() } : { email: String(value || '').trim() };
+};
+
+const sendWithBrevo = async ({ from: sender, to, subject, html, replyTo }) => {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      sender: parseAddress(sender),
+      to: [parseAddress(to)],
+      subject,
+      htmlContent: html,
+      ...(replyTo ? { replyTo: parseAddress(replyTo) } : {}),
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`Brevo refused the email (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json().catch(() => ({}));
+  return { messageId: data.messageId || 'brevo' };
+};
+
+let warned = false;
 const createTransporter = () => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ EMAIL_USER or EMAIL_PASS not set in .env. Emails will not be sent.');
+  const mode = emailMode();
+  if (!mode) {
+    if (!warned) console.warn('⚠️ Email is off: set BREVO_API_KEY + EMAIL_FROM (or EMAIL_USER + EMAIL_PASS for Gmail SMTP).');
+    warned = true;
     return null;
   }
-
-  return nodemailer.createTransport({
+  if (!senderEmail()) {
+    if (!warned) console.warn('⚠️ Email is off: set EMAIL_FROM to the sender address.');
+    warned = true;
+    return null;
+  }
+  if (mode === 'brevo') {
+    return { mode, verify: (cb) => cb && cb(null), sendMail: (opts) => track(sendWithBrevo(opts)) };
+  }
+  const smtp = nodemailer.createTransport({
     service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    connectionTimeout: 15000,
   });
+  return { mode, verify: (cb) => smtp.verify(cb), sendMail: (opts) => track(smtp.sendMail(opts)) };
+};
+
+/** For the admin panel: how email is set up and how the last send went. */
+const emailStatus = () => ({
+  mode: emailMode(),
+  sender: senderEmail() || null,
+  team: teamEmail() || null,
+  lastSend: { ...lastSend },
+});
+
+/** Admin "send a test email" check; throws with the provider's reason if it fails. */
+const sendTestEmail = async (to) => {
+  const transporter = createTransporter();
+  if (!transporter) throw new Error('Email is not set up on the server (see DEPLOY.md, "Booking emails").');
+  const paint = paintFor(null);
+  const html = layout({
+    paint,
+    eyebrow: 'Test',
+    title: 'Email<br>works.',
+    intro: `This test came from the Driveaway server using <strong>${transporter.mode === 'brevo' ? 'Brevo' : 'Gmail SMTP'}</strong>. Booking confirmations, status updates and alerts will arrive the same way.`,
+  });
+  return transporter.sendMail({ from: from('Driveaway'), to, subject: 'Driveaway test email', html });
 };
 
 const formatDate = (dateStr) => {
@@ -202,7 +285,7 @@ const sendBookingConfirmationEmail = async ({ booking, car, user }) => {
       return;
     }
     const { subject, html } = buildBookingConfirmationEmail({ booking, car, user });
-    const info = await transporter.sendMail({ from: `"Driveaway Rentals" <${process.env.EMAIL_USER}>`, to: recipient, subject, html });
+    const info = await transporter.sendMail({ from: from('Driveaway Rentals'), to: recipient, subject, html });
     console.log(`✉️ Booking confirmation email sent to ${recipient} (Message ID: ${info.messageId})`);
   } catch (error) {
     console.error('❌ Error sending booking confirmation email:', error.message);
@@ -251,7 +334,7 @@ const sendBookingStatusUpdateEmail = async ({ booking, newStatus }) => {
     const recipient = booking.customerEmail || (booking.user && booking.user.email);
     if (!recipient) return;
     const { subject, html } = buildBookingStatusUpdateEmail({ booking, newStatus });
-    await transporter.sendMail({ from: `"Driveaway Rentals" <${process.env.EMAIL_USER}>`, to: recipient, subject, html });
+    await transporter.sendMail({ from: from('Driveaway Rentals'), to: recipient, subject, html });
     console.log(`✉️ Booking status update email sent to ${recipient} (Status: ${newStatus})`);
   } catch (error) {
     console.error('❌ Error sending status update email:', error.message);
@@ -296,7 +379,7 @@ const sendCarAvailabilityEmail = async ({ recipientEmail, car }) => {
     if (!transporter) return;
     if (!recipientEmail || !car) return;
     const { subject, html } = buildCarAvailabilityEmail({ car });
-    const info = await transporter.sendMail({ from: `"Driveaway Fleet Alerts" <${process.env.EMAIL_USER}>`, to: recipientEmail, subject, html });
+    const info = await transporter.sendMail({ from: from('Driveaway Fleet Alerts'), to: recipientEmail, subject, html });
     console.log(`✉️ Car availability email sent to ${recipientEmail} (Message ID: ${info.messageId})`);
   } catch (error) {
     console.error(`❌ Error sending car availability email to ${recipientEmail}:`, error.message);
@@ -345,7 +428,7 @@ const sendDiscountBroadcastEmail = async (opts) => {
     if (!transporter) return;
     if (!opts.recipientEmail || !opts.discountCode) return;
     const { subject, html } = buildDiscountBroadcastEmail(opts);
-    const info = await transporter.sendMail({ from: `"Driveaway Offers" <${process.env.EMAIL_USER}>`, to: opts.recipientEmail, subject, html });
+    const info = await transporter.sendMail({ from: from('Driveaway Offers'), to: opts.recipientEmail, subject, html });
     console.log(`✉️ Discount broadcast email sent to ${opts.recipientEmail} with code ${opts.discountCode} (Message ID: ${info.messageId})`);
   } catch (error) {
     console.error(`❌ Error sending discount broadcast email to ${opts.recipientEmail}:`, error.message);
@@ -401,8 +484,8 @@ const sendContactMessageEmail = async (raw) => {
     const transporter = createTransporter();
     if (!transporter) return;
     const { reply, team } = buildContactEmails(raw);
-    await transporter.sendMail({ from: `"Driveaway Support" <${process.env.EMAIL_USER}>`, to: raw.email, ...reply });
-    await transporter.sendMail({ from: `"Driveaway Contact Form" <${process.env.EMAIL_USER}>`, to: process.env.EMAIL_USER, replyTo: raw.email, ...team });
+    await transporter.sendMail({ from: from('Driveaway Support'), to: raw.email, ...reply });
+    await transporter.sendMail({ from: from('Driveaway Contact Form'), to: teamEmail(), replyTo: raw.email, ...team });
     console.log(`✉️ Contact auto-reply sent to ${raw.email} and team notified.`);
   } catch (error) {
     console.error('❌ Error sending contact message emails:', error.message);
@@ -411,6 +494,8 @@ const sendContactMessageEmail = async (raw) => {
 
 module.exports = {
   createTransporter,
+  emailStatus,
+  sendTestEmail,
   sendBookingConfirmationEmail,
   sendContactMessageEmail,
   sendBookingStatusUpdateEmail,

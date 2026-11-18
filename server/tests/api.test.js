@@ -54,7 +54,7 @@ const isoDay = (offsetDays) => {
 before(async () => {
   server = spawn(process.execPath, ['server.js'], {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env, PORT: String(PORT), EMAIL_USER: '', EMAIL_PASS: '', NODE_ENV: 'test' },
+    env: { ...process.env, PORT: String(PORT), EMAIL_USER: '', EMAIL_PASS: '', BREVO_API_KEY: '', NODE_ENV: 'test' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';

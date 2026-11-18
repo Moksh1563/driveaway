@@ -26,7 +26,10 @@ services:
         sync: false            # your Vercel site, e.g. https://driveaway.vercel.app
       - key: VERCEL_PROJECT_PREFIX
         value: driveaway
-      - key: EMAIL_USER
-        sync: false            # optional: Gmail address for booking emails (leave blank to skip emails)
-      - key: EMAIL_PASS
-        sync: false            # optional: Gmail app password
+      # Booking emails. Render's free plan blocks SMTP, so email goes through Brevo's API (free: 300/day).
+      - key: BREVO_API_KEY
+        sync: false            # from Brevo: SMTP & API -> API keys
+      - key: EMAIL_FROM
+        sync: false            # the sender address you verified in Brevo
+      - key: EMAIL_TEAM
+        sync: false            # optional: where contact-form messages go (defaults to EMAIL_FROM)

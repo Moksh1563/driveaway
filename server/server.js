@@ -125,9 +125,12 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚗 Driveaway server running on port ${PORT}`);
 
-  // Verify Gmail SMTP transport configuration on startup
+  // Report how email will be sent (Render's free plan blocks SMTP, so use Brevo there)
   const transporter = createTransporter();
-  if (transporter) {
+  if (transporter?.mode === 'brevo') {
+    console.log('✉️ Email service ready (Brevo API)');
+  } else if (transporter) {
+    if (process.env.RENDER) console.warn('⚠️ Gmail SMTP is blocked on Render\'s free plan. Set BREVO_API_KEY instead.');
     transporter.verify((err) => {
       if (err) console.error('⚠️ Email service SMTP connection failed:', err.message);
       else console.log('✉️ Email service ready (Gmail SMTP)');

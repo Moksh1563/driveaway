@@ -7,6 +7,7 @@ import Badge from '../../components/ui/Badge';
 import { sizedImage, handleImageError } from '../../utils/image';
 import { AdminDashboardSkeleton } from '../../components/ui/Skeletons';
 import { EASE } from '../../theme/motion';
+import EmailStatusCard from '../../components/admin/EmailStatusCard';
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
@@ -26,6 +27,8 @@ export default function AdminDashboardPage() {
         <h1 className="font-wide font-black uppercase tracking-tight text-2xl sm:text-3xl">Overview</h1>
         <p className="text-muted text-sm mt-1">Live analytics & performance metrics for Driveaway Ahmedabad.</p>
       </div>
+
+      <EmailStatusCard />
 
       {/* Main Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
