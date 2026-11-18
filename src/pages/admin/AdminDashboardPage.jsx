@@ -6,6 +6,7 @@ import StatCard from '../../components/admin/StatCard';
 import Badge from '../../components/ui/Badge';
 import { sizedImage, handleImageError } from '../../utils/image';
 import { AdminDashboardSkeleton } from '../../components/ui/Skeletons';
+import { EASE } from '../../theme/motion';
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
@@ -55,9 +56,10 @@ export default function AdminDashboardPage() {
                   ₹{m.revenue > 999 ? (m.revenue / 1000).toFixed(0) + 'K' : m.revenue}
                 </span>
                 <motion.div
-                  initial={{ height: 0 }}
-                  animate={{ height: `${maxRev ? (m.revenue / maxRev) * 100 : 5}%` }}
-                  transition={{ duration: 0.6, delay: i * 0.08 }}
+                  initial={{ scaleY: 0 }}
+                  animate={{ scaleY: 1 }}
+                  transition={{ duration: 0.4, delay: Math.min(i, 5) * 0.04, ease: EASE.out }}
+                  style={{ height: `${maxRev ? (m.revenue / maxRev) * 100 : 5}%`, transformOrigin: 'bottom' }}
                   className="w-full rounded-t-lg min-h-[6px] bg-ink"
                 />
                 <span className="text-muted text-[10px] font-semibold text-center leading-tight">{m.month.split(' ')[0]}</span>

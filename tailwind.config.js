@@ -2,6 +2,8 @@
 const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
+  // hover: styles only where a real pointer hovers, so taps on phones don't trigger them
+  future: { hoverOnlyWhenSupported: true },
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
@@ -43,8 +45,11 @@ export default {
         lift: '0 24px 60px -24px rgb(0 0 0 / 0.45)',
         soft: '0 8px 24px -12px rgb(0 0 0 / 0.25)',
       },
+      // Named curves (charles-ux-animation): ease-out to appear, ease-in to leave, ease-in-out to move
       transitionTimingFunction: {
-        out: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        out: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        in: 'cubic-bezier(0.55, 0, 1, 0.45)',
+        'in-out': 'cubic-bezier(0.77, 0, 0.175, 1)',
       },
       keyframes: {
         wipe: {
@@ -53,7 +58,7 @@ export default {
         },
       },
       animation: {
-        wipe: 'wipe 650ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        wipe: 'wipe 450ms cubic-bezier(0.77, 0, 0.175, 1) both',
       },
     },
   },

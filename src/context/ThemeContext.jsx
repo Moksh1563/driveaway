@@ -26,10 +26,10 @@ export const ThemeProvider = ({ children }) => {
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    // Animate colours only during the switch, then remove the transition again
+    // Switch every colour on the same frame: transitions are off while the theme changes
     const root = document.documentElement;
-    root.classList.add('theme-transition');
-    window.setTimeout(() => root.classList.remove('theme-transition'), 250);
+    root.classList.add('theme-switching');
+    window.setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching'))), 0);
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   }, []);
 

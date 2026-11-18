@@ -97,7 +97,7 @@ export default function AdminUsersPage() {
                     <td className="p-4">
                       <button
                         onClick={() => setDeleteModal(user)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
+                        className="hit-area w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

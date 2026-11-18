@@ -61,7 +61,7 @@ export default function AdminMessagesPage() {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  filter === f.key
  ? 'bg-ink border-ink text-ground shadow-sm'
  : 'bg-raised border-line text-muted hover:border-ink'
@@ -85,7 +85,7 @@ export default function AdminMessagesPage() {
               <button
                 key={msg._id}
                 onClick={() => handleSelect(msg)}
-                className={`w-full text-left p-4 rounded-chip border transition-all ${
+                className={`w-full text-left p-4 rounded-chip border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  selected?._id === msg._id
  ? 'bg-ink/10 border-ink/40 shadow-sm'
  : 'bg-surface border-line hover:border-ink/50'

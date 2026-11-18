@@ -40,7 +40,7 @@ export default function AdminLayout() {
             type="button"
             onClick={() => setCollapsed((c) => !c)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
+            className="hit-area grid h-10 w-10 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
           >
             {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>

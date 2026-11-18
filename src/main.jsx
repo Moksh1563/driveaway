@@ -2,11 +2,17 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { MotionConfig } from 'framer-motion'
+import { MotionConfig, MotionGlobalConfig } from 'framer-motion'
 import App from './App'
 import './index.css'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
+
+// Reduced motion turns every Framer animation off (fades included), not only movement
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+const applyReducedMotion = () => { MotionGlobalConfig.skipAnimations = reducedMotion.matches }
+applyReducedMotion()
+reducedMotion.addEventListener?.('change', applyReducedMotion)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>

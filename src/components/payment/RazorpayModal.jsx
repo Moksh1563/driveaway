@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { modalMotion } from '../../theme/motion';
 import { 
   X, ShieldCheck, CheckCircle2, Loader2, QrCode, Smartphone, 
   CreditCard, Landmark, Wallet, ArrowRight, Lock, Sparkles
@@ -113,10 +114,7 @@ export default function RazorpayModal({
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 ">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          transition={{ duration: 0.2 }}
+          {...modalMotion}
           className="w-full max-w-xl bg-raised text-ink rounded-chip shadow-2xl overflow-hidden border border-line flex flex-col max-h-[92vh]"
         >
           {/* ── RAZORPAY HEADER ────────────────────────────────────── */}
@@ -148,7 +146,7 @@ export default function RazorpayModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
+                  className="hit-area w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -176,7 +174,7 @@ export default function RazorpayModal({
                   <button
                     type="button"
                     onClick={() => setActiveTab('upi')}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,opacity,box-shadow,transform] text-left ${
  activeTab === 'upi'
  ? 'bg-[#0b72e7] text-white shadow-sm'
  : 'text-muted hover:bg-ink/10/60'
@@ -194,7 +192,7 @@ export default function RazorpayModal({
                   <button
                     type="button"
                     onClick={() => setActiveTab('card')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,opacity,box-shadow,transform] text-left ${
  activeTab === 'card'
  ? 'bg-[#0b72e7] text-white shadow-sm'
  : 'text-muted hover:bg-ink/10/60'
@@ -207,7 +205,7 @@ export default function RazorpayModal({
                   <button
                     type="button"
                     onClick={() => setActiveTab('netbanking')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,opacity,box-shadow,transform] text-left ${
  activeTab === 'netbanking'
  ? 'bg-[#0b72e7] text-white shadow-sm'
  : 'text-muted hover:bg-ink/10/60'
@@ -220,7 +218,7 @@ export default function RazorpayModal({
                   <button
                     type="button"
                     onClick={() => setActiveTab('wallet')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,opacity,box-shadow,transform] text-left ${
  activeTab === 'wallet'
  ? 'bg-[#0b72e7] text-white shadow-sm'
  : 'text-muted hover:bg-ink/10/60'
@@ -240,7 +238,7 @@ export default function RazorpayModal({
                         <button
                           type="button"
                           onClick={() => setUpiMode('qr')}
-                          className={`text-xs font-bold pb-1 transition-all ${
+                          className={`text-xs font-bold pb-1 transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  upiMode === 'qr'
  ? 'text-[#0b72e7] border-b-2 border-[#0b72e7]'
  : 'text-muted hover:text-ink'
@@ -251,7 +249,7 @@ export default function RazorpayModal({
                         <button
                           type="button"
                           onClick={() => setUpiMode('vpa')}
-                          className={`text-xs font-bold pb-1 transition-all ${
+                          className={`text-xs font-bold pb-1 transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  upiMode === 'vpa'
  ? 'text-[#0b72e7] border-b-2 border-[#0b72e7]'
  : 'text-muted hover:text-ink'
@@ -404,7 +402,7 @@ export default function RazorpayModal({
                         {POPULAR_BANKS.map((b) => (
                           <label
                             key={b.id}
-                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-all ${
+                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  selectedBank === b.id
  ? 'border-[#0b72e7] bg-blue-50/50 text-[#0c2340]'
  : 'border-line hover:bg-ground text-muted'
@@ -435,7 +433,7 @@ export default function RazorpayModal({
                         {POPULAR_WALLETS.map((w) => (
                           <label
                             key={w.id}
-                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-all ${
+                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  selectedWallet === w.id
  ? 'border-[#0b72e7] bg-blue-50/50 text-[#0c2340]'
  : 'border-line hover:bg-ground text-muted'
@@ -463,7 +461,7 @@ export default function RazorpayModal({
                     <button
                       type="button"
                       onClick={handlePay}
-                      className="w-full py-3 px-4 bg-[#0b72e7] hover:bg-[#0960c5] active:scale-[0.99] text-white rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all"
+                      className="w-full py-3 px-4 bg-[#0b72e7] hover:bg-[#0960c5] active:scale-[0.99] text-white rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     >
                       <Lock className="w-4 h-4" />
                       Pay ₹{formattedAmount}
@@ -514,7 +512,7 @@ export default function RazorpayModal({
 
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 bg-[#0b72e7] hover:bg-[#0960c5] text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                  className="w-full py-2.5 px-4 bg-[#0b72e7] hover:bg-[#0960c5] text-white rounded-xl font-bold text-xs shadow-md transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 >
                   Confirm & Authorize ₹{formattedAmount}
                 </button>
@@ -525,9 +523,9 @@ export default function RazorpayModal({
             {step === 'success' && (
               <div className="py-14 px-6 text-center space-y-4">
                 <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 220, damping: 15 }}
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', duration: 0.4, bounce: 0.15 }}
                   className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-sm"
                 >
                   <CheckCircle2 className="w-10 h-10" />

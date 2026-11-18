@@ -14,6 +14,11 @@
     --paint: 208 2 27;
     --on-paint: 255 255 255;
     color-scheme: light;
+
+    /* Motion tokens (mirrored in src/theme/motion.js): appear, leave, move on screen */
+    --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+    --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   }
   /* Clear-coat (dark) */
   :root.dark {
@@ -36,11 +41,11 @@
   h1, h2, h3 { text-wrap: balance; }
   p { text-wrap: pretty; }
 
-  html.theme-transition,
-  html.theme-transition *,
-  html.theme-transition *::before,
-  html.theme-transition *::after {
-    transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease, fill 220ms ease !important;
+  html.theme-switching,
+  html.theme-switching *,
+  html.theme-switching *::before,
+  html.theme-switching *::after {
+    transition: none !important;
   }
 
   :focus-visible { outline: 2px solid rgb(var(--ink)); outline-offset: 3px; border-radius: 6px; }
@@ -66,6 +71,8 @@
     }
     /* Never hold content back waiting to scroll into view */
     [data-reveal][data-shown='false'] > * { opacity: 1 !important; }
+    /* A spinner keeps turning: a frozen one looks like the app has hung */
+    .animate-spin { animation-duration: 1s !important; animation-iteration-count: infinite !important; }
   }
 }
 
@@ -121,7 +128,7 @@
   /* Buttons */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold text-sm px-5 py-3
-      transition-[background-color,color,box-shadow,transform] duration-200 ease-out active:scale-[0.98]
+      transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.96]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
   }
   .btn-ink { @apply btn bg-ink text-ground hover:bg-ink/85; }
@@ -160,7 +167,7 @@
 @keyframes line-up { from { transform: translateY(108%); } }
 @keyframes draw { from { transform: scaleX(0); } }
 @keyframes pop { 0% { transform: scale(1.07); } }
-@keyframes dot-in { from { opacity: 0; transform: scale(0); } }
+@keyframes dot-in { from { opacity: 0; transform: scale(0.5); } }
 @keyframes stamp {
   0% { opacity: 0; transform: scale(1.8) rotate(-16deg); }
   60% { opacity: 1; transform: scale(0.94) rotate(-8deg); }
@@ -168,15 +175,17 @@
 @keyframes sheen { to { transform: translateX(420%) skewX(-18deg); } }
 
 /* One-off entrances: add the class, optionally set --d (delay) */
-.enter { animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: var(--d, 0ms); }
-.enter-deal { animation: deal 800ms cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: var(--d, 0ms); }
-.enter-pop { animation: pop 420ms cubic-bezier(0.16, 1, 0.3, 1); }
+.enter { animation: rise 480ms var(--ease-out) backwards; animation-delay: var(--d, 0ms); }
+.enter-deal { animation: deal 480ms var(--ease-out) backwards; animation-delay: var(--d, 0ms); }
+/* A step or view replacing the last one (booking steps): quick, short rise */
+.step-in { animation: rise 240ms var(--ease-out) backwards; --rise: 12px; }
+.enter-pop { animation: pop 300ms var(--ease-out); }
 
 /* Scroll reveal (see components/ui/Reveal.jsx): children animate in a capped stagger */
 [data-reveal][data-shown='false'] > * { opacity: 0; }
 [data-reveal][data-shown='true'] > * {
-  animation: var(--reveal-anim, rise) 760ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-  animation-delay: calc(var(--delay, 0ms) + min(var(--i, 0) * var(--stagger, 70ms), 560ms));
+  animation: var(--reveal-anim, rise) var(--reveal-dur, 450ms) var(--ease-out) backwards;
+  animation-delay: calc(var(--delay, 0ms) + min(var(--i, 0), 5) * var(--stagger, 40ms));
 }
 [data-reveal='deal'] { --reveal-anim: deal; }
 [data-reveal='slide'] { --reveal-anim: slide-in; }
@@ -185,8 +194,8 @@
 .mask-line { display: block; overflow: hidden; padding-bottom: 0.08em; margin-bottom: -0.08em; }
 .mask-line > span {
   display: block;
-  animation: line-up 900ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-  animation-delay: calc(80ms + var(--i, 0) * 90ms);
+  animation: line-up 500ms var(--ease-out) backwards;
+  animation-delay: calc(80ms + var(--i, 0) * 80ms);
 }
 
 /* Clear-coat gloss: a band of light sweeping across lacquer or a photo */
@@ -200,7 +209,7 @@
   width: 32%;
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.3), transparent);
   transform: translateX(-130%) skewX(-18deg);
-  animation: sheen 1200ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
+  animation: sheen 800ms var(--ease-out) 200ms both;
 }
 /* Hover version for car cards: sweeps in on hover, resets instantly when the pointer leaves */
 .card-sheen { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
@@ -214,20 +223,42 @@
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.26), transparent);
   transform: translateX(-150%) skewX(-18deg);
 }
-.group:hover .card-sheen::before,
+@media (hover: hover) and (pointer: fine) {
+  .group:hover .card-sheen::before {
+    transform: translateX(380%) skewX(-18deg);
+    transition: transform 700ms var(--ease-out);
+  }
+}
 .group:focus-visible .card-sheen::before {
   transform: translateX(380%) skewX(-18deg);
-  transition: transform 950ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 700ms var(--ease-out);
 }
 
 /* Arrows nudge in the direction they point */
-.lucide-arrow-right, .lucide-arrow-up-right { transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1); }
-a:hover .lucide-arrow-right, button:hover .lucide-arrow-right, .group:hover .lucide-arrow-right { transform: translateX(3px); }
-a:hover .lucide-arrow-up-right, button:hover .lucide-arrow-up-right, .group:hover .lucide-arrow-up-right { transform: translate(2px, -2px); }
+.lucide-arrow-right, .lucide-arrow-up-right { transition: transform 150ms var(--ease-out); }
+@media (hover: hover) and (pointer: fine) {
+  a:hover .lucide-arrow-right, button:hover .lucide-arrow-right, .group:hover .lucide-arrow-right { transform: translateX(3px); }
+  a:hover .lucide-arrow-up-right, button:hover .lucide-arrow-up-right, .group:hover .lucide-arrow-up-right { transform: translate(2px, -2px); }
+}
 
 /* Spec tags pinned to the car photo: tag rises, leader line draws, dot lands */
-.pin-tag { animation: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: calc(300ms + var(--i, 0) * 90ms); --rise: 10px; }
-.pin-line { animation: draw 520ms cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: calc(420ms + var(--i, 0) * 90ms); }
-.pin-dot { animation: dot-in 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: calc(760ms + var(--i, 0) * 90ms); }
+.pin-tag { animation: rise 400ms var(--ease-out) backwards; animation-delay: calc(250ms + var(--i, 0) * 90ms); --rise: 10px; }
+.pin-line { animation: draw 360ms var(--ease-out) backwards; animation-delay: calc(350ms + var(--i, 0) * 90ms); }
+.pin-dot { animation: dot-in 240ms var(--ease-out) backwards; animation-delay: calc(560ms + var(--i, 0) * 90ms); }
 
-.stamp-in { animation: stamp 700ms cubic-bezier(0.16, 1, 0.3, 1) 550ms backwards; }
+.stamp-in { animation: stamp 500ms var(--ease-out) 450ms backwards; }
+
+/* Small icon buttons: a clickable zone bigger than the visual (40px with a mouse, 44px on touch) */
+.hit-area { position: relative; }
+.hit-area::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 40px);
+  height: max(100%, 40px);
+  translate: -50% -50%;
+}
+@media (pointer: coarse) {
+  .hit-area::after { width: max(100%, 44px); height: max(100%, 44px); }
+}

@@ -80,7 +80,7 @@ export default function AdminBookingsPage() {
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setPage(1); }}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  statusFilter === s
  ? 'bg-ink border-ink text-ground shadow-sm'
  : 'bg-raised border-line text-muted hover:border-ink'
@@ -141,7 +141,7 @@ export default function AdminBookingsPage() {
                         <button
                           type="button"
                           onClick={() => setViewModal(b)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
                           title="View details"
                           aria-label={`View booking ${b.invoiceNumber}`}
                         >
@@ -150,7 +150,7 @@ export default function AdminBookingsPage() {
                         <button
                           onClick={() => generatePDF(b, b.car)}
                           type="button"
-                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
                           title="Download invoice PDF"
                           aria-label={`Download invoice ${b.invoiceNumber}`}
                         >
@@ -159,7 +159,7 @@ export default function AdminBookingsPage() {
                         <button
                           onClick={() => sendWhatsAppInvoice(b, b.car)}
                           type="button"
-                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
                           title="Send invoice on WhatsApp"
                           aria-label={`Send invoice ${b.invoiceNumber} on WhatsApp`}
                         >
@@ -168,7 +168,7 @@ export default function AdminBookingsPage() {
                         <button
                           type="button"
                           onClick={() => handleDelete(b._id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 transition-colors"
                           title="Delete booking"
                           aria-label={`Delete booking ${b.invoiceNumber}`}
                         >
@@ -243,7 +243,7 @@ export default function AdminBookingsPage() {
               <button
                 type="button"
                 onClick={() => sendWhatsAppInvoice(viewModal, viewModal.car)}
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm shadow-sm"
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-[color,background-color,border-color,opacity,box-shadow,transform] text-sm shadow-sm"
               >
                 <MessageCircle className="w-4 h-4 text-white" />
                 WhatsApp Invoice

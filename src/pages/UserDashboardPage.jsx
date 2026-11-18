@@ -141,7 +141,7 @@ export default function UserDashboardPage() {
                 <Link to="/fleet" className="btn-ink">Find a car <ArrowRight className="h-4 w-4" /></Link>
               </div>
             ) : (
-              <Reveal as="ul" variant="deal" stagger={80} className="-mx-4 flex items-end gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" aria-label="Cars you have booked">
+              <Reveal as="ul" variant="deal" className="-mx-4 flex items-end gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" aria-label="Cars you have booked">
                 {garage.map((b) => {
                   const p = paintFor(b.car.type);
                   const live = ['Pending', 'Confirmed'].includes(b.status);
@@ -237,7 +237,7 @@ export default function UserDashboardPage() {
             {loadingBookings ? <BookingRowsSkeleton count={4} /> : filteredBookings.length === 0 ? (
               <p className="rounded-chip border border-dashed border-line p-12 text-center text-muted">No {bookingFilter === 'All' ? '' : bookingFilter.toLowerCase() + ' '}bookings.</p>
             ) : (
-              <Reveal key={bookingFilter} wrap stagger={60} className="space-y-4">
+              <Reveal wrap className="space-y-4">
                 {filteredBookings.map((b) => (
                   <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} full />
                 ))}

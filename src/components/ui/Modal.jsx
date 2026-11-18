@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
+import { modalMotion, scrimMotion } from '../../theme/motion';
 
 const sizeClasses = {
   sm: 'max-w-sm',
@@ -35,18 +36,13 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
           className="fixed inset-0 z-[9999] overflow-y-auto p-3 sm:p-6"
         >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            {...scrimMotion}
             onClick={onClose}
             className="fixed inset-0 bg-[#0C0C0D]/70"
           />
           <div className="flex min-h-full items-center justify-center py-4">
             <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 16 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              {...modalMotion}
               className={`relative z-10 w-full my-auto ${sizeClasses[size]} bg-surface text-ink border border-line rounded-[22px] shadow-lift max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col`}
             >
               {title && (
@@ -56,7 +52,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
                     type="button"
                     onClick={onClose}
                     aria-label="Close"
-                    className="w-9 h-9 grid place-items-center rounded-full border border-line hover:border-ink transition-colors"
+                    className="hit-area w-10 h-10 grid place-items-center rounded-full border border-line hover:border-ink transition-colors"
                   >
                     <X className="w-4 h-4" />
                   </button>

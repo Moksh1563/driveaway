@@ -13,7 +13,7 @@ export default function CarCard({ car, index = 0 }) {
     <Link
       to={`/cars/${_id}`}
       style={paintStyle(type)}
-      className="group relative flex h-full flex-col overflow-hidden rounded-chip border border-line bg-raised transition-[box-shadow,transform] duration-300 ease-out hover:-translate-y-1 hover:shadow-lift focus-visible:-translate-y-1"
+      className="group relative flex h-full flex-col overflow-hidden rounded-chip border border-line bg-raised transition-[box-shadow,border-color] duration-150 ease-out hover:border-ink/25 hover:shadow-lift focus-visible:shadow-lift"
       aria-label={`${name}, ${type}, ${rupees(dailyRate)} per day${available ? '' : `, currently ${status.toLowerCase()}`}`}
     >
       <div className="relative aspect-[16/10] overflow-hidden bg-ink/5">
@@ -27,7 +27,7 @@ export default function CarCard({ car, index = 0 }) {
           loading={index < 3 ? 'eager' : 'lazy'}
           decoding="async"
           onError={(e) => handleImageError(e, 640)}
-          className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04] ${available ? '' : 'unlit'}`}
+          className={`h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] ${available ? '' : 'unlit'}`}
         />
         {available && <span className="card-sheen" aria-hidden="true" />}
         {/* Paint chip */}
@@ -69,8 +69,8 @@ export default function CarCard({ car, index = 0 }) {
         {/* Footer row fills with the car's paint on hover */}
         <div className="relative mt-auto pt-5">
           <div className="relative overflow-hidden rounded-xl border border-line">
-            <span className="lacquer absolute inset-0 origin-left scale-x-0 transition-transform duration-500 ease-out group-hover:scale-x-100 group-focus-visible:scale-x-100" aria-hidden="true" />
-            <span className="relative flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors duration-300 group-hover:text-on-paint group-focus-visible:text-on-paint">
+            <span className="lacquer absolute inset-0 origin-left scale-x-0 transition-transform duration-300 ease-in-out group-hover:scale-x-100 group-focus-visible:scale-x-100" aria-hidden="true" />
+            <span className="relative flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors duration-150 group-hover:text-on-paint group-focus-visible:text-on-paint">
               {available ? 'View and book' : 'Notify me when free'}
               {available ? <ArrowUpRight className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
             </span>

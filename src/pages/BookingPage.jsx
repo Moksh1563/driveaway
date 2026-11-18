@@ -215,7 +215,7 @@ export default function BookingPage() {
 
       <div className="page-container grid gap-10 py-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
-          <div key={step} className="enter" style={{ '--rise': '18px' }}>
+          <div key={step} className="step-in">
           {step === 1 && (
             <div className="space-y-10">
               <fieldset>

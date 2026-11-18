@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import Logo from './Logo';
 import DiscountSubscribeModal from '../discounts/DiscountSubscribeModal';
+import { menuMotion, panelMotion, SPRING } from '../../theme/motion';
 
 const LINKS = [
   { to: '/', label: 'Home' },
@@ -70,7 +71,7 @@ export default function Navbar() {
                       <motion.span
                         layoutId="nav-underline"
                         className="absolute left-1 right-1 -bottom-0.5 h-[3px] rounded-full bg-paint"
-                        transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                        transition={SPRING}
                       />
                     )}
                   </>
@@ -108,10 +109,8 @@ export default function Navbar() {
                   {menuOpen && (
                     <motion.div
                       role="menu"
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      transition={{ duration: 0.16 }}
+                      {...menuMotion}
+                      style={{ transformOrigin: 'top right' }}
                       className="absolute right-0 mt-2 w-60 rounded-2xl border border-line bg-surface shadow-lift p-1.5"
                     >
                       <div className="px-3 py-2.5 border-b border-line mb-1">
@@ -158,10 +157,7 @@ export default function Navbar() {
         <AnimatePresence>
           {mobileOpen && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              {...panelMotion}
               className="md:hidden overflow-hidden border-t border-line bg-ground"
             >
               <div className="page-container py-5 space-y-1">

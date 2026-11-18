@@ -11,7 +11,7 @@ import React, { Children, cloneElement, isValidElement, useEffect, useRef, useSt
 export default function Reveal({
   as: Tag = 'div',
   variant = 'rise',
-  stagger = 70,
+  stagger = 40,
   delay = 0,
   wrap = false,
   cellClassName = '',
@@ -22,6 +22,7 @@ export default function Reveal({
 }) {
   const ref = useRef(null);
   const [shown, setShown] = useState(false);
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -41,6 +42,14 @@ export default function Reveal({
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  // Once the first entrance has played, items that arrive later (a filter change, a new tab)
+  // come in quickly with no stagger instead of replaying the whole entrance.
+  useEffect(() => {
+    if (!shown) return undefined;
+    const t = setTimeout(() => setSettled(true), delay + 5 * stagger + 500);
+    return () => clearTimeout(t);
+  }, [shown, delay, stagger]);
 
   let i = 0;
   const items = Children.map(children, (child) => {
@@ -62,7 +71,12 @@ export default function Reveal({
       data-reveal={variant}
       data-shown={shown}
       className={className}
-      style={{ ...style, '--stagger': `${stagger}ms`, '--delay': `${delay}ms` }}
+      style={{
+        ...style,
+        '--stagger': `${settled ? 0 : stagger}ms`,
+        '--delay': `${settled ? 0 : delay}ms`,
+        ...(settled ? { '--reveal-dur': '150ms', '--rise': '6px' } : {}),
+      }}
       {...rest}
     >
       {items}

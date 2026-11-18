@@ -10,6 +10,7 @@ import { HUBS } from '../theme/hubs';
 import { PAINTS, PAINT_ORDER, carTitle, paintFor, paintStyle, plural, pluralLower, rupees } from '../theme/paints';
 import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
 import { CarGridSkeleton } from '../components/ui/Skeletons';
+import { EASE } from '../theme/motion';
 
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -56,17 +57,27 @@ export default function HomePage() {
   // Longest headline line in characters drives the font size ("IN FRENCH RACING BLUE." is the widest)
   const headlineChars = Math.max(plural(selected).length + 1, paint.name.length + 4);
 
+  // One motion at a time: scroll back up to the hero first, then sweep the new paint in;
+  // the photo cross-fades as the sweep lands.
   const choose = (type, e) => {
     if (type === selected) return;
     const rect = e?.currentTarget?.getBoundingClientRect();
     const x = rect ? `${Math.round(((rect.left + rect.width / 2) / window.innerWidth) * 100)}%` : '50%';
-    setSelected(type);
-    setWipe({ type, x, key: Date.now() });
-    // Bring the visitor back up to the hero so they see the new paint sweep in
-    if (window.scrollY > 0) {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    const paintIn = () => {
+      setSelected(type);
+      setWipe({ type, x, key: Date.now() });
+    };
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (window.scrollY <= 0 || reduce) {
+      if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'auto' });
+      paintIn();
+      return;
     }
+    let done = false;
+    const go = () => { if (!done) { done = true; window.removeEventListener('scrollend', go); paintIn(); } };
+    window.addEventListener('scrollend', go, { once: true });
+    setTimeout(go, 700); // browsers without scrollend
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const findCars = (e) => {
@@ -203,10 +214,9 @@ export default function HomePage() {
               <AnimatePresence initial={false}>
                 <motion.img
                   key={heroImg || 'hero'}
-                  initial={{ opacity: 0, scale: 1.04 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                  initial={{ opacity: 0, scale: 1.03 }}
+                  animate={{ opacity: 1, scale: 1, transition: { duration: 0.3, delay: 0.22, ease: EASE.out } }}
+                  exit={{ opacity: 0, transition: { duration: 0.22, delay: 0.22, ease: EASE.in } }}
                   src={heroImg ? sizedImage(heroImg, 1400, 75) : '/images/luxury_hypercars_header.webp'}
                   srcSet={heroImg ? imageSrcSet(heroImg, [800, 1200, 1600]) : undefined}
                   sizes="(min-width: 1024px) 55vw, 100vw"
@@ -216,9 +226,9 @@ export default function HomePage() {
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               </AnimatePresence>
-              {/* clear-coat highlight, plus a gloss sweep each time a new paint lands */}
+              {/* clear-coat highlight, plus one gloss sweep when the page first loads */}
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,rgb(255_255_255/0.18),transparent_32%)]" />
-              <span key={`sheen-${selected}`} className="sheen-sweep" aria-hidden="true" />
+              <span className="sheen-sweep" aria-hidden="true" />
               {group?.hero && (
                 <Link
                   to={`/cars/${group.hero._id}`}
@@ -268,7 +278,7 @@ export default function HomePage() {
                       transform: `translateY(${active ? -14 : 10}px) rotate(${tilt}deg)`,
                       transformOrigin: 'bottom center',
                     }}
-                    className={`lacquer relative flex h-32 w-[150px] flex-shrink-0 flex-col justify-between rounded-t-[18px] border border-b-0 border-white/25 pl-5 pr-4 pt-3.5 pb-7 text-left shadow-chip transition-transform duration-500 ease-out sm:w-[172px]`}
+                    className={`lacquer relative flex h-32 w-[150px] flex-shrink-0 flex-col justify-between rounded-t-[18px] border border-b-0 border-white/25 pl-5 pr-4 pt-3.5 pb-7 text-left shadow-chip transition-transform duration-300 ease-in-out sm:w-[172px]`}
                   >
                     <span className="code-label text-[11px]">Paint {p.no}</span>
                     <span>
@@ -307,7 +317,7 @@ export default function HomePage() {
         {loading ? (
           <CarGridSkeleton count={3} className="mt-10" />
         ) : (
-          <Reveal key={selected} wrap cellClassName="h-full" stagger={80} className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          <Reveal wrap cellClassName="h-full" className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {(group?.list || []).slice(0, 6).map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
           </Reveal>
         )}
@@ -322,7 +332,7 @@ export default function HomePage() {
               Booking takes about two minutes. Pay online now, or pay in cash when you collect the car.
             </p>
           </div>
-          <Reveal as="ol" variant="deal" stagger={140} className="mt-10 grid gap-4 md:grid-cols-3">
+          <Reveal as="ol" variant="deal" stagger={90} className="mt-10 grid gap-4 md:grid-cols-3">
             <li style={paintStyle(selected)} className="lacquer on-paint flex min-h-[260px] flex-col justify-between rounded-chip rounded-bl-[56px] p-7 shadow-chip">
               <span className="font-wide font-black text-5xl" aria-hidden="true">1</span>
               <span>
@@ -391,7 +401,7 @@ export default function HomePage() {
               Book {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <Reveal as="ul" variant="slide" stagger={55} className="grid content-start gap-x-8 sm:grid-cols-2 lg:col-span-7">
+          <Reveal as="ul" variant="slide" className="grid content-start gap-x-8 sm:grid-cols-2 lg:col-span-7">
             {HUBS.map((h) => (
               <li key={h} className="border-b border-on-paint/35">
                 <Link

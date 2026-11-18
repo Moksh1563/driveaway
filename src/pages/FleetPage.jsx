@@ -7,6 +7,7 @@ import CarCard from '../components/cars/CarCard';
 import { PAINTS, PAINT_ORDER, paintFor, paintStyle, plural, rupees } from '../theme/paints';
 import Reveal from '../components/ui/Reveal';
 import { CarGridSkeleton } from '../components/ui/Skeletons';
+import { sheetMotion, sheetScrimMotion } from '../theme/motion';
 
 const TYPES = ['All', ...PAINT_ORDER];
 const FUELS = ['All', 'Petrol', 'Diesel', 'Electric', 'Hybrid'];
@@ -190,7 +191,7 @@ export default function FleetPage() {
   return (
     <div className="pt-[72px]">
       {/* Head: wears the selected paint, or primer when showing everything */}
-      <header style={typeSel ? paintStyle(typeSel) : undefined} className={`transition-[background-color,color] duration-500 ease-out ${typeSel ? 'lacquer on-paint' : 'border-b border-line'}`}>
+      <header style={typeSel ? paintStyle(typeSel) : undefined} className={`transition-[background-color,color] duration-300 ease-in-out ${typeSel ? 'lacquer on-paint' : 'border-b border-line'}`}>
         <div className="page-container pt-12 pb-8">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -263,13 +264,10 @@ export default function FleetPage() {
 
           <AnimatePresence>
             {filtersOpen && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Filters">
+              <motion.div {...sheetScrimMotion} className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Filters">
                 <div className="absolute inset-0 bg-[#0C0C0D]/60" onClick={() => setFiltersOpen(false)} />
                 <motion.div
-                  initial={{ y: '100%' }}
-                  animate={{ y: 0 }}
-                  exit={{ y: '100%' }}
-                  transition={{ type: 'tween', duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  {...sheetMotion}
                   className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-[24px] border-t border-line bg-surface p-6"
                 >
                   <div className="mb-6 flex items-center justify-between">
@@ -288,7 +286,9 @@ export default function FleetPage() {
           </AnimatePresence>
 
           <section className="min-w-0 flex-1" aria-label="Cars" aria-busy={loading}>
-            {loading ? (
+            {/* Skeleton only on the first load; on later filter changes the last results stay
+                (dimmed) until the new ones arrive, so the grid never blanks or replays its entrance */}
+            {loading && cars.length === 0 ? (
               <CarGridSkeleton />
             ) : error ? (
               <div className="rounded-chip border border-line p-12 text-center">
@@ -305,11 +305,9 @@ export default function FleetPage() {
             ) : (
               <>
                 <Reveal
-                  key={`${filters.type}|${filters.fuelType}|${filters.transmission}|${filters.minPrice}|${filters.maxPrice}|${filters.search}|${filters.sort}|${filters.page}`}
                   wrap
                   cellClassName="h-full"
-                  stagger={60}
-                  className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3"
+                  className={`grid grid-cols-1 gap-6 transition-opacity duration-150 ease-out sm:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`}
                 >
                   {cars.map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
                 </Reveal>

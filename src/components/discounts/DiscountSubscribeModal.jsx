@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Tag, Sparkles, CheckCircle2, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
+import { modalMotion } from '../../theme/motion';
 
 export default function DiscountSubscribeModal({ isOpen, onClose }) {
   const { user } = useAuth();
@@ -68,18 +69,16 @@ export default function DiscountSubscribeModal({ isOpen, onClose }) {
       >
         <div className="flex min-h-full items-center justify-center py-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 15 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            {...modalMotion}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md my-auto bg-surface border border-line rounded-[24px] p-5 sm:p-7 shadow-2xl text-ink cursor-default max-h-[calc(100vh-2rem)] overflow-y-auto"
+            className="relative w-full max-w-md my-auto bg-surface border border-line rounded-[24px] p-5 sm:p-7 shadow-2xl text-ink cursor-default max-h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden"
           >
             {/* Close button */}
             <button
               type="button"
               onClick={handleClose}
               aria-label="Close discount notification modal"
-              className="absolute top-3.5 right-3.5 z-30 p-2 text-muted hover:text-ink dark:text-muted rounded-full bg-ink/5 hover:bg-ink/10 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="absolute top-3.5 right-3.5 z-30 p-2 text-muted hover:text-ink dark:text-muted rounded-full bg-ink/5 hover:bg-ink/10 transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
             >
               <X className="w-5 h-5" />
             </button>
@@ -99,7 +98,7 @@ export default function DiscountSubscribeModal({ isOpen, onClose }) {
                 <div className="pt-2">
                   <button
                     onClick={handleClose}
-                    className="w-full bg-ink hover:bg-ink/85 text-ground font-extrabold py-3 rounded-xl transition-all"
+                    className="w-full bg-ink hover:bg-ink/85 text-ground font-extrabold py-3 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   >
                     Awesome, Thanks!
                   </button>
@@ -150,14 +149,14 @@ export default function DiscountSubscribeModal({ isOpen, onClose }) {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="Enter your email address"
-                      className="w-full bg-raised border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ink/30 transition-all"
+                      className="w-full bg-raised border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ink/30 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-ink hover:bg-ink/85 disabled:opacity-50 text-ground font-black text-sm rounded-xl transition-all shadow-lg "
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-ink hover:bg-ink/85 disabled:opacity-50 text-ground font-black text-sm rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-lg "
                   >
                     {loading ? (
                       <>

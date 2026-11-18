@@ -13,6 +13,7 @@ import NotifyAvailabilityModal from '../components/cars/NotifyAvailabilityModal'
 import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
 import { carTitle, paintFor, paintStyle, pluralLower, rupees } from '../theme/paints';
 import { CarDetailSkeleton } from '../components/ui/Skeletons';
+import { EASE } from '../theme/motion';
 
 // Where each spec tag sits around the photo (percent of the frame) and which side its leader line runs to
 const PINS = [
@@ -112,7 +113,7 @@ export default function CarDetailPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.15, ease: EASE.out }}
                   src={sizedImage(currentImage, 1600, 75)}
                   srcSet={imageSrcSet(currentImage, [800, 1200, 1600])}
                   sizes="(min-width: 1024px) 64vw, 100vw"

@@ -34,7 +34,7 @@ export default function AboutPage() {
       </section>
 
       {/* The paint book, full width */}
-      <Reveal as="section" variant="deal" stagger={70} aria-label="Our categories" className="overflow-hidden grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+      <Reveal as="section" variant="deal" aria-label="Our categories" className="overflow-hidden grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
         {PAINT_ORDER.map((t) => (
           <Link
             key={t}

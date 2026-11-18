@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Bell, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
+import { modalMotion } from '../../theme/motion';
 
 export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
   const { user } = useAuth();
@@ -72,18 +73,16 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
       >
         <div className="flex min-h-full items-center justify-center py-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 15 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            {...modalMotion}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md my-auto bg-surface border border-line rounded-[24px] p-5 sm:p-6 shadow-2xl text-ink cursor-default max-h-[calc(100vh-2rem)] overflow-y-auto"
+            className="relative w-full max-w-md my-auto bg-surface border border-line rounded-[24px] p-5 sm:p-6 shadow-2xl text-ink cursor-default max-h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden"
           >
             {/* Close button */}
             <button
               type="button"
               onClick={handleClose}
               aria-label="Close notify modal"
-              className="absolute top-3.5 right-3.5 z-30 p-2 text-muted hover:text-ink dark:text-muted rounded-full bg-ink/5 hover:bg-ink/10 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="absolute top-3.5 right-3.5 z-30 p-2 text-muted hover:text-ink dark:text-muted rounded-full bg-ink/5 hover:bg-ink/10 transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
             >
               <X className="w-5 h-5" />
             </button>
@@ -100,7 +99,7 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
               <div className="pt-2">
                 <button
                   onClick={handleClose}
-                  className="w-full bg-ink hover:bg-ink/85 text-ground font-extrabold py-3 rounded-xl transition-all"
+                  className="w-full bg-ink hover:bg-ink/85 text-ground font-extrabold py-3 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 >
                   Done
                 </button>
@@ -158,7 +157,7 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="e.g. yourname@gmail.com"
-                    className="w-full bg-raised border border-line rounded-xl px-4 py-3 text-sm text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ink/30 transition-all"
+                    className="w-full bg-raised border border-line rounded-xl px-4 py-3 text-sm text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ink/30 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   />
                   <p className="text-[11px] text-muted mt-1">
                     We will send a one-time email with a direct booking link as soon as this car is available.
@@ -169,14 +168,14 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="flex-1 py-3 bg-ink/5 hover:bg-ink/10 text-muted font-bold text-sm rounded-xl transition-all"
+                    className="flex-1 py-3 bg-ink/5 hover:bg-ink/10 text-muted font-bold text-sm rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-ink hover:bg-ink/85 disabled:opacity-50 text-ground font-extrabold text-sm rounded-xl transition-all shadow-lg "
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-ink hover:bg-ink/85 disabled:opacity-50 text-ground font-extrabold text-sm rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-lg "
                   >
                     {loading ? (
                       <>

@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Tag, Send, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, Users, Bell, Sparkles, Copy, Check } from 'lucide-react';
 import api from '../../api/axios';
 import { TableSkeleton } from '../../components/ui/Skeletons';
+import { modalMotion, panelMotion } from '../../theme/motion';
 
 export default function AdminDiscountsPage() {
 
@@ -154,7 +155,7 @@ export default function AdminDiscountsPage() {
 
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-extrabold text-sm px-4 py-2.5 rounded-xl transition-all shadow-md "
+          className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-extrabold text-sm px-4 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-md "
         >
           {showForm ? 'Cancel' : <><Plus className="w-4 h-4" /> Create Promo Code</>}
         </button>
@@ -218,9 +219,7 @@ export default function AdminDiscountsPage() {
       <AnimatePresence>
         {showForm && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+            {...panelMotion}
             className="bg-surface border border-line rounded-chip p-6 shadow-sm overflow-hidden"
           >
             <h2 className="text-lg font-bold text-ink mb-4 flex items-center gap-2">
@@ -314,14 +313,14 @@ export default function AdminDiscountsPage() {
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="px-4 py-2 text-sm font-bold text-muted hover:bg-ink/5 rounded-xl transition-all"
+                  className="px-4 py-2 text-sm font-bold text-muted hover:bg-ink/5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-extrabold text-sm px-6 py-2.5 rounded-xl transition-all shadow-md disabled:opacity-50"
+                  className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-extrabold text-sm px-6 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-md disabled:opacity-50"
                 >
                   {formLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Save Promo Code
@@ -391,7 +390,7 @@ export default function AdminDiscountsPage() {
                     <td className="py-4 px-5">
                       <button
                         onClick={() => handleToggle(discount._id)}
-                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full cursor-pointer transition-all ${
+                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full cursor-pointer transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
  discount.isActive
  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
  : 'bg-ink/5 text-muted border border-line hover:bg-ink/10'
@@ -418,7 +417,7 @@ export default function AdminDiscountsPage() {
                         {/* Broadcast Button */}
                         <button
                           onClick={() => setBroadcastTarget(discount)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-ink/10 hover:bg-ink/20 text-ink dark:text-ink border border-ink/25 rounded-lg text-xs font-extrabold transition-all"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-ink/10 hover:bg-ink/20 text-ink dark:text-ink border border-ink/25 rounded-lg text-xs font-extrabold transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                           title="Broadcast email notification to users"
                         >
                           <Send className="w-3.5 h-3.5" />
@@ -448,9 +447,7 @@ export default function AdminDiscountsPage() {
         {broadcastTarget && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 ">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              {...modalMotion}
               className="bg-surface border border-line rounded-[24px] p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-4"
             >
               <div className="flex items-center gap-3">
@@ -494,7 +491,7 @@ export default function AdminDiscountsPage() {
                 <button
                   type="button"
                   onClick={() => setBroadcastTarget(null)}
-                  className="px-4 py-2.5 text-sm font-bold text-muted hover:bg-ink/5 rounded-xl transition-all"
+                  className="px-4 py-2.5 text-sm font-bold text-muted hover:bg-ink/5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 >
                   Cancel
                 </button>
@@ -502,7 +499,7 @@ export default function AdminDiscountsPage() {
                   type="button"
                   disabled={broadcasting}
                   onClick={handleBroadcast}
-                  className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-extrabold text-sm px-6 py-2.5 rounded-xl transition-all shadow-md disabled:opacity-50"
+                  className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-extrabold text-sm px-6 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-md disabled:opacity-50"
                 >
                   {broadcasting ? (
                     <>

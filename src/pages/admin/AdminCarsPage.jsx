@@ -12,7 +12,7 @@ import { TableSkeleton } from '../../components/ui/Skeletons';
 const TYPES = ['Hypercar', 'Supercar', 'Sports', 'Luxury', 'SUV', 'Sedan', 'Electric', 'Hatchback'];
 const FUELS = ['Petrol', 'Diesel', 'Electric', 'Hybrid'];
 const STATUSES = ['Available', 'Rented', 'Maintenance'];
-const inputClass = 'w-full bg-raised border border-line rounded-xl px-3.5 py-2.5 text-ink text-sm focus:ring-2 focus:ring-ink/30 outline-none placeholder:text-muted/70 transition-all';
+const inputClass = 'w-full bg-raised border border-line rounded-xl px-3.5 py-2.5 text-ink text-sm focus:ring-2 focus:ring-ink/30 outline-none placeholder:text-muted/70 transition-[color,background-color,border-color,opacity,box-shadow,transform]';
 const labelClass = 'text-xs font-bold text-muted uppercase tracking-wider mb-1 block';
 
 const EMPTY_CAR = { name: '', company: '', type: 'Sedan', yearModel: 2024, dailyRate: '', status: 'Available', fuelType: 'Petrol', transmission: 'Manual', seats: 5, luggage: 'Medium', mileage: '', description: '', images: { main: '', img1: '', img2: '', img3: '' } };
@@ -157,13 +157,13 @@ export default function AdminCarsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(car)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-50 dark:bg-ink/10 border border-amber-200 dark:border-ink/20 text-ink dark:text-ink hover:bg-amber-100 dark:hover:bg-ink/20 transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg bg-amber-50 dark:bg-ink/10 border border-amber-200 dark:border-ink/20 text-ink dark:text-ink hover:bg-amber-100 dark:hover:bg-ink/20 transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => openDelete(car)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
