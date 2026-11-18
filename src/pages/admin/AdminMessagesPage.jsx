@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Mail, Phone, CheckCheck, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
-import Spinner from '../../components/ui/Spinner';
+import { TableSkeleton } from '../../components/ui/Skeletons';
 
 export default function AdminMessagesPage() {
   const [messages, setMessages] = useState([]);
@@ -72,7 +72,7 @@ export default function AdminMessagesPage() {
         ))}
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? <TableSkeleton cols={4} /> : (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[500px]">
           {/* Message list */}
           <div className="lg:col-span-2 space-y-2.5">

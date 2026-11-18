@@ -15,12 +15,12 @@ import { ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import RazorpayModal from '../components/payment/RazorpayModal';
 import { sizedImage, handleImageError } from '../utils/image';
 import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
 import { HUBS } from '../theme/hubs';
+import { BookingSkeleton } from '../components/ui/Skeletons';
 
 const LOCATIONS = HUBS;
 const PAYMENT_METHODS = [
@@ -175,7 +175,7 @@ export default function BookingPage() {
   };
 
   if (loading) {
-    return <div className="grid min-h-screen place-items-center pt-[72px]"><Spinner size="lg" /></div>;
+    return <BookingSkeleton />;
   }
 
   const STEPS = ['Trip', 'Driver', 'Confirm'];
@@ -215,6 +215,7 @@ export default function BookingPage() {
 
       <div className="page-container grid gap-10 py-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
+          <div key={step} className="enter" style={{ '--rise': '18px' }}>
           {step === 1 && (
             <div className="space-y-10">
               <fieldset>
@@ -380,6 +381,7 @@ export default function BookingPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Fare sheet */}
@@ -397,7 +399,7 @@ export default function BookingPage() {
               {loyaltyDiscount > 0 && <div className="flex justify-between text-ok"><dt>Loyalty points</dt><dd>-{rupees(Math.round(loyaltyDiscount))}</dd></div>}
               <div className="flex items-end justify-between border-t border-line pt-4">
                 <dt className="font-semibold">Total</dt>
-                <dd className="font-wide font-black text-3xl">{totalDays > 0 ? rupees(Math.round(totalAmount)) : '–'}</dd>
+                <dd key={Math.round(totalAmount)} className="enter-pop origin-right font-wide font-black text-3xl">{totalDays > 0 ? rupees(Math.round(totalAmount)) : '–'}</dd>
               </div>
               <p className="text-xs text-muted">Taxes included. Free cancellation.</p>
             </dl>

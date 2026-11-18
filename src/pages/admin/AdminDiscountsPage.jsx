@@ -14,6 +14,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tag, Send, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, Users, Bell, Sparkles, Copy, Check } from 'lucide-react';
 import api from '../../api/axios';
+import { TableSkeleton } from '../../components/ui/Skeletons';
 
 export default function AdminDiscountsPage() {
 
@@ -339,7 +340,7 @@ export default function AdminDiscountsPage() {
         </div>
 
         {loading ? (
-          <div className="py-16 text-center text-muted">Loading discount codes...</div>
+          <TableSkeleton rows={4} cols={5} />
         ) : discounts.length === 0 ? (
           <div className="py-16 text-center text-muted">
             No promo codes created yet. Click "Create Promo Code" to get started!

@@ -8,11 +8,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Bell, Shield, MapPin, Sparkles, CalendarX, Star } from 'lucide-react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import Spinner from '../components/ui/Spinner';
 import StarRating from '../components/ui/StarRating';
 import NotifyAvailabilityModal from '../components/cars/NotifyAvailabilityModal';
 import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
 import { carTitle, paintFor, paintStyle, pluralLower, rupees } from '../theme/paints';
+import { CarDetailSkeleton } from '../components/ui/Skeletons';
 
 // Where each spec tag sits around the photo (percent of the frame) and which side its leader line runs to
 const PINS = [
@@ -45,7 +45,7 @@ export default function CarDetailPage() {
   }, [id]);
 
   if (loading) {
-    return <div className="grid min-h-screen place-items-center pt-[72px]"><Spinner size="lg" /></div>;
+    return <CarDetailSkeleton />;
   }
 
   if (!car) {
@@ -135,13 +135,13 @@ export default function CarDetailPage() {
                 const pin = PINS[i];
                 const { side, ...pos } = pin;
                 return (
-                  <li key={s.label} className="absolute flex items-center" style={{ ...pos, flexDirection: side === 'right' ? 'row' : 'row-reverse' }}>
-                    <span className="rounded-lg border border-line bg-ground px-3 py-2 shadow-soft">
+                  <li key={s.label} className="absolute flex items-center" style={{ ...pos, flexDirection: side === 'right' ? 'row' : 'row-reverse', '--i': i }}>
+                    <span className="pin-tag rounded-lg border border-line bg-ground px-3 py-2 shadow-soft">
                       <span className="block code-label text-[10px] text-muted">{s.label}</span>
                       <span className="block font-semibold text-sm leading-tight">{s.value}</span>
                     </span>
-                    <span className="h-[2px] w-14 bg-white shadow-[0_0_0_1px_rgb(0_0_0/0.25)]" />
-                    <span className="h-3 w-3 rounded-full border-2 border-white bg-paint shadow-soft" />
+                    <span className="pin-line h-[2px] w-14 bg-white shadow-[0_0_0_1px_rgb(0_0_0/0.25)]" style={{ transformOrigin: side === 'right' ? 'left' : 'right' }} />
+                    <span className="pin-dot h-3 w-3 rounded-full border-2 border-white bg-paint shadow-soft" />
                   </li>
                 );
               })}

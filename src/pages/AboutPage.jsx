@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { sizedImage } from '../utils/image';
 import { PAINTS, PAINT_ORDER, paintStyle } from '../theme/paints';
 import { HUBS } from '../theme/hubs';
+import Reveal from '../components/ui/Reveal';
 
 const PROMISES = [
   { title: 'Fully insured', desc: 'Every car carries comprehensive insurance for the length of your rental.' },
@@ -40,7 +41,7 @@ export default function AboutPage() {
       </section>
 
       {/* The paint book, full width */}
-      <section aria-label="Our categories" className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+      <Reveal as="section" variant="deal" stagger={70} aria-label="Our categories" className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
         {PAINT_ORDER.map((t) => (
           <Link
             key={t}
@@ -55,7 +56,7 @@ export default function AboutPage() {
             </span>
           </Link>
         ))}
-      </section>
+      </Reveal>
 
       {/* Promises */}
       <section className="page-container py-20 lg:py-24">

@@ -48,9 +48,7 @@ export default function Navbar() {
   };
 
   const linkClass = ({ isActive }) =>
-    `relative px-1 py-2 text-sm font-semibold transition-colors ${
-      isActive ? 'text-ink after:absolute after:left-1 after:right-1 after:-bottom-0.5 after:h-[3px] after:rounded-full after:bg-paint' : 'text-muted hover:text-ink'
-    }`;
+    `relative px-1 py-2 text-sm font-semibold transition-colors ${isActive ? 'text-ink' : 'text-muted hover:text-ink'}`;
 
   return (
     <>
@@ -65,7 +63,18 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-7">
             {LINKS.map((l) => (
               <NavLink key={l.to} to={l.to} end={l.to === '/'} className={linkClass}>
-                {l.label}
+                {({ isActive }) => (
+                  <>
+                    {l.label}
+                    {isActive && (
+                      <motion.span
+                        layoutId="nav-underline"
+                        className="absolute left-1 right-1 -bottom-0.5 h-[3px] rounded-full bg-paint"
+                        transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                      />
+                    )}
+                  </>
+                )}
               </NavLink>
             ))}
           </div>

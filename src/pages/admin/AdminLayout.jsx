@@ -3,9 +3,9 @@ import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-do
 import { LayoutDashboard, Car, Calendar, Users, MessageSquare, LogOut, PanelLeftClose, PanelLeftOpen, Home, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../../components/ui/ThemeToggle';
-import Spinner from '../../components/ui/Spinner';
 import Logo from '../../components/layout/Logo';
 import { PAINTS, PAINT_ORDER } from '../../theme/paints';
+import { AdminDashboardSkeleton, TableSkeleton } from '../../components/ui/Skeletons';
 
 const NAV = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -95,7 +95,7 @@ export default function AdminLayout() {
 
       <div className="min-w-0 flex-1">
         <div className="mx-auto max-w-7xl p-5 sm:p-8">
-          <Suspense fallback={<div className="py-24"><Spinner size="lg" /></div>}>
+          <Suspense fallback={location.pathname === '/admin' ? <AdminDashboardSkeleton /> : <TableSkeleton />}>
             <Outlet />
           </Suspense>
         </div>

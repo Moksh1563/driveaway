@@ -5,6 +5,8 @@ import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Search, MapPin, Calend
 import api from '../api/axios';
 import CarCard from '../components/cars/CarCard';
 import { PAINTS, PAINT_ORDER, paintFor, paintStyle, plural, rupees } from '../theme/paints';
+import Reveal from '../components/ui/Reveal';
+import { CarGridSkeleton } from '../components/ui/Skeletons';
 
 const TYPES = ['All', ...PAINT_ORDER];
 const FUELS = ['All', 'Petrol', 'Diesel', 'Electric', 'Hybrid'];
@@ -24,20 +26,6 @@ function useDebounced(value, delay = 350) {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-function CarCardSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-chip border border-line bg-raised" aria-hidden="true">
-      <div className="skeleton aspect-[16/10] rounded-none" />
-      <div className="space-y-3 p-5">
-        <div className="skeleton h-3 w-1/4" />
-        <div className="flex justify-between gap-4"><div className="skeleton h-5 w-2/3" /><div className="skeleton h-5 w-16" /></div>
-        <div className="skeleton h-3 w-1/2" />
-        <div className="skeleton h-11 w-full" />
-      </div>
-    </div>
-  );
 }
 
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -202,7 +190,7 @@ export default function FleetPage() {
   return (
     <div className="pt-[72px]">
       {/* Head: wears the selected paint, or primer when showing everything */}
-      <header style={typeSel ? paintStyle(typeSel) : undefined} className={typeSel ? 'lacquer on-paint' : 'border-b border-line'}>
+      <header style={typeSel ? paintStyle(typeSel) : undefined} className={`transition-[background-color,color] duration-500 ease-out ${typeSel ? 'lacquer on-paint' : 'border-b border-line'}`}>
         <div className="page-container pt-12 pb-8">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -301,9 +289,7 @@ export default function FleetPage() {
 
           <section className="min-w-0 flex-1" aria-label="Cars" aria-busy={loading}>
             {loading ? (
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                {[...Array(6)].map((_, i) => <CarCardSkeleton key={i} />)}
-              </div>
+              <CarGridSkeleton />
             ) : error ? (
               <div className="rounded-chip border border-line p-12 text-center">
                 <h2 className="font-wide font-black uppercase text-xl">Could not load the fleet</h2>
@@ -318,9 +304,15 @@ export default function FleetPage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                <Reveal
+                  key={`${filters.type}|${filters.fuelType}|${filters.transmission}|${filters.minPrice}|${filters.maxPrice}|${filters.search}|${filters.sort}|${filters.page}`}
+                  wrap
+                  cellClassName="h-full"
+                  stagger={60}
+                  className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3"
+                >
                   {cars.map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
-                </div>
+                </Reveal>
                 {totalPages > 1 && (
                   <nav className="mt-12 flex items-center justify-center gap-2" aria-label="Pages">
                     <button type="button" disabled={filters.page <= 1} onClick={() => goToPage(filters.page - 1)} aria-label="Previous page" className="grid h-11 w-11 place-items-center rounded-full border border-line hover:border-ink disabled:opacity-30">

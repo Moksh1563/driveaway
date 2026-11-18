@@ -3,10 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import { Download, MessageCircle, ArrowRight } from 'lucide-react';
 import api from '../api/axios';
 import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceGenerator';
-import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
 import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
 import { sizedImage, handleImageError } from '../utils/image';
+import { SuccessSkeleton } from '../components/ui/Skeletons';
 
 const longDate = (d) => new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -24,7 +24,7 @@ export default function BookingSuccessPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  if (loading) return <div className="grid min-h-screen place-items-center pt-[72px]"><Spinner size="lg" /></div>;
+  if (loading) return <SuccessSkeleton />;
 
   if (!booking) {
     return (
@@ -67,11 +67,17 @@ export default function BookingSuccessPage() {
           </div>
 
           {/* Job sheet */}
-          <div className="lg:col-span-6">
+          <div className="enter lg:col-span-6" style={{ '--d': '150ms' }}>
             <div className="overflow-hidden rounded-chip bg-raised text-ink shadow-lift">
               <div className="relative aspect-[16/7] bg-ink/10">
                 <img src={sizedImage(car.images?.main, 960)} alt={car.name || ''} onError={(e) => handleImageError(e, 960)} className="h-full w-full object-cover" />
                 <span className="lacquer absolute left-4 top-4 rounded-lg px-2.5 py-1.5 code-label text-[11px]">Paint {paint.no} · {car.type}</span>
+                <span
+                  className="stamp-in absolute bottom-4 right-4 rotate-[-8deg] rounded-lg border-[3px] border-white bg-[#0C0C0D]/80 px-4 py-2 font-wide font-black uppercase tracking-tight text-xl text-white shadow-lift"
+                  aria-hidden="true"
+                >
+                  {paid ? 'Paid' : 'Reserved'}
+                </span>
               </div>
               <dl className="divide-y divide-line text-sm">
                 <div className="flex items-center justify-between gap-4 px-6 py-4">

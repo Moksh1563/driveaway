@@ -4,8 +4,8 @@ import { useAuth } from './context/AuthContext';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ScrollToTop from './components/layout/ScrollToTop';
-import Spinner from './components/ui/Spinner';
 import HomePage from './pages/HomePage';
+import { RouteSkeleton } from './components/ui/Skeletons';
 
 // Every page except the home page is loaded on demand, so the first visit
 // downloads far less JavaScript (admin pages, PDF invoice code, etc. are split out).
@@ -27,12 +27,8 @@ const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
 const AdminMessagesPage = lazy(() => import('./pages/admin/AdminMessagesPage'));
 const AdminDiscountsPage = lazy(() => import('./pages/admin/AdminDiscountsPage'));
 
-const PageLoader = () => (
-  <div className="min-h-[70vh] flex items-center justify-center" role="status" aria-live="polite">
-    <Spinner size="lg" />
-    <span className="sr-only">Loading…</span>
-  </div>
-);
+// While a page's code or the signed-in user is loading, show a skeleton shaped like that page
+const PageLoader = RouteSkeleton;
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();

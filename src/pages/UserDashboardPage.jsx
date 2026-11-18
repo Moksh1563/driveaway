@@ -4,7 +4,6 @@ import { Star, Download, X, MessageCircle, ArrowRight, CreditCard } from 'lucide
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -13,6 +12,8 @@ import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceG
 import RazorpayModal from '../components/payment/RazorpayModal';
 import { sizedImage, handleImageError } from '../utils/image';
 import { paintFor, paintStyle, rupees } from '../theme/paints';
+import Reveal from '../components/ui/Reveal';
+import { BookingRowsSkeleton, GarageRingSkeleton } from '../components/ui/Skeletons';
 
 const TABS = ['Overview', 'My Bookings', 'Profile'];
 
@@ -133,14 +134,14 @@ export default function UserDashboardPage() {
           {/* Garage ring: one paint chip for every car you have booked */}
           <div className="mt-10">
             {loadingBookings ? (
-              <div className="flex gap-2">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-24 w-44 rounded-t-[16px] rounded-b-none" />)}</div>
+              <GarageRingSkeleton />
             ) : garage.length === 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-4 rounded-chip border border-dashed border-line p-6">
                 <p className="text-muted">Your garage is empty. Every car you book parks a paint chip here.</p>
                 <Link to="/fleet" className="btn-ink">Find a car <ArrowRight className="h-4 w-4" /></Link>
               </div>
             ) : (
-              <ul className="-mx-4 flex items-end gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" aria-label="Cars you have booked">
+              <Reveal as="ul" variant="deal" stagger={80} className="-mx-4 flex items-end gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" aria-label="Cars you have booked">
                 {garage.map((b) => {
                   const p = paintFor(b.car.type);
                   const live = ['Pending', 'Confirmed'].includes(b.status);
@@ -158,7 +159,7 @@ export default function UserDashboardPage() {
                     </li>
                   );
                 })}
-              </ul>
+              </Reveal>
             )}
           </div>
         </div>
@@ -185,13 +186,15 @@ export default function UserDashboardPage() {
           <div className="grid gap-10 lg:grid-cols-12">
             <div className="min-w-0 lg:col-span-8">
               <h2 className="font-wide font-black uppercase tracking-tight text-xl">Latest bookings</h2>
-              <div className="mt-5 space-y-4">
-                {loadingBookings ? <Spinner /> : bookings.length === 0 ? (
-                  <p className="text-muted">No bookings yet.</p>
-                ) : bookings.slice(0, 3).map((b) => (
-                  <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} />
-                ))}
-              </div>
+              {loadingBookings ? <div className="mt-5"><BookingRowsSkeleton /></div> : bookings.length === 0 ? (
+                <p className="mt-5 text-muted">No bookings yet.</p>
+              ) : (
+                <Reveal wrap className="mt-5 space-y-4">
+                  {bookings.slice(0, 3).map((b) => (
+                    <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} />
+                  ))}
+                </Reveal>
+              )}
               {bookings.length > 3 && (
                 <button type="button" onClick={() => setActiveTab('My Bookings')} className="btn-line mt-6">
                   All {bookings.length} bookings <ArrowRight className="h-4 w-4" />
@@ -231,14 +234,14 @@ export default function UserDashboardPage() {
                 </button>
               ))}
             </div>
-            {loadingBookings ? <Spinner /> : filteredBookings.length === 0 ? (
+            {loadingBookings ? <BookingRowsSkeleton count={4} /> : filteredBookings.length === 0 ? (
               <p className="rounded-chip border border-dashed border-line p-12 text-center text-muted">No {bookingFilter === 'All' ? '' : bookingFilter.toLowerCase() + ' '}bookings.</p>
             ) : (
-              <div className="space-y-4">
+              <Reveal key={bookingFilter} wrap stagger={60} className="space-y-4">
                 {filteredBookings.map((b) => (
                   <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} full />
                 ))}
-              </div>
+              </Reveal>
             )}
           </div>
         )}

@@ -3,11 +3,11 @@ import { motion } from 'framer-motion';
 import { Plus, Edit2, Trash2, Search, X, Upload, Image as ImageIcon, Loader2, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
-import Spinner from '../../components/ui/Spinner';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { sizedImage, handleImageError } from '../../utils/image';
+import { TableSkeleton } from '../../components/ui/Skeletons';
 
 const TYPES = ['Hypercar', 'Supercar', 'Sports', 'Luxury', 'SUV', 'Sedan', 'Electric', 'Hatchback'];
 const FUELS = ['Petrol', 'Diesel', 'Electric', 'Hybrid'];
@@ -123,7 +123,7 @@ export default function AdminCarsPage() {
         />
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? <TableSkeleton cols={6} /> : (
         <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

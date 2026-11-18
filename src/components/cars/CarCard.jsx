@@ -29,6 +29,7 @@ export default function CarCard({ car, index = 0 }) {
           onError={(e) => handleImageError(e, 640)}
           className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04] ${available ? '' : 'unlit'}`}
         />
+        {available && <span className="card-sheen" aria-hidden="true" />}
         {/* Paint chip */}
         <span className="lacquer absolute left-3 top-3 rounded-lg px-2.5 py-1.5 code-label text-[11px] shadow-soft">
           {paint.no} · {type}

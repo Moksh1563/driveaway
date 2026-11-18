@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Search, Trash2, Gift } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
-import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
+import { TableSkeleton } from '../../components/ui/Skeletons';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
@@ -56,7 +56,7 @@ export default function AdminUsersPage() {
         />
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? <TableSkeleton cols={5} /> : (
         <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

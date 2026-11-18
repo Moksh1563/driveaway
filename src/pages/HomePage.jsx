@@ -5,9 +5,11 @@ import { ArrowRight, ArrowUpRight, MapPin } from 'lucide-react';
 import api from '../api/axios';
 import CarCard from '../components/cars/CarCard';
 import StarRating from '../components/ui/StarRating';
+import Reveal from '../components/ui/Reveal';
 import { HUBS } from '../theme/hubs';
 import { PAINTS, PAINT_ORDER, carTitle, paintFor, paintStyle, plural, pluralLower, rupees } from '../theme/paints';
 import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
+import { CarGridSkeleton } from '../components/ui/Skeletons';
 
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -16,8 +18,8 @@ export default function HomePage() {
   const navigate = useNavigate();
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [paintType, setPaintType] = useState('Supercar'); // paint currently on the hero ground
-  const [selected, setSelected] = useState('Supercar');   // paint the visitor picked (content follows instantly)
+  const [paintType, setPaintType] = useState('Hypercar'); // paint currently on the hero ground
+  const [selected, setSelected] = useState('Hypercar');   // paint the visitor picked (content follows instantly)
   const [wipe, setWipe] = useState(null);                  // { type, x, key } while the new paint sweeps in
   const [slip, setSlip] = useState({ location: '', from: '', to: '' });
   const [reviews, setReviews] = useState([]);
@@ -60,6 +62,11 @@ export default function HomePage() {
     const x = rect ? `${Math.round(((rect.left + rect.width / 2) / window.innerWidth) * 100)}%` : '50%';
     setSelected(type);
     setWipe({ type, x, key: Date.now() });
+    // Bring the visitor back up to the hero so they see the new paint sweep in
+    if (window.scrollY > 0) {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    }
   };
 
   const findCars = (e) => {
@@ -76,7 +83,7 @@ export default function HomePage() {
 
   useEffect(() => {
     const row = fanRef.current;
-    const chip = row?.querySelector('[aria-checked="true"]');
+    const chip = row?.querySelector('[aria-checked="true"]')?.parentElement; // the chip's wrapper
     if (!row || !chip || row.scrollWidth <= row.clientWidth) return;
     const target = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
     row.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
@@ -116,23 +123,18 @@ export default function HomePage() {
         <div className="page-container relative pt-6 pb-36 lg:pt-8">
           {/* Headline: full width, sized so its longest line always fits */}
           <div style={{ containerType: 'inline-size' }}>
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.h1
-                key={selected}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="display"
-                style={{ fontSize: `min(5rem, calc(100cqw / ${headlineChars * 0.86}))` }}
-              >
-                {plural(selected)},<br />in {paint.name}.
-              </motion.h1>
-            </AnimatePresence>
+            <h1
+              key={selected}
+              className="display"
+              style={{ fontSize: `min(5rem, calc(100cqw / ${headlineChars * 0.86}))` }}
+            >
+              <span className="mask-line"><span style={{ '--i': 0 }}>{plural(selected)},</span></span>
+              <span className="mask-line"><span style={{ '--i': 1 }}>in {paint.name}.</span></span>
+            </h1>
           </div>
 
           <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-12 lg:gap-10">
-          <div className="lg:col-span-5 flex flex-col">
+          <Reveal className="lg:col-span-5 flex flex-col" delay={250} stagger={90}>
             <p className="max-w-md text-lg leading-snug">
               Hypercars, supercars and luxury cars for hire in Ahmedabad. Pick a paint, pick your dates, collect the keys.
             </p>
@@ -193,10 +195,10 @@ export default function HomePage() {
                 Find {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
               </button>
             </form>
-          </div>
+          </Reveal>
 
           {/* The car, in a lacquer chip frame */}
-          <div className="order-first lg:order-none lg:col-span-7">
+          <div className="enter order-first lg:order-none lg:col-span-7" style={{ '--d': '120ms' }}>
             <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] rounded-bl-[96px] bg-black/20 shadow-lift lg:aspect-auto lg:h-full lg:min-h-[340px]">
               <AnimatePresence initial={false}>
                 <motion.img
@@ -214,8 +216,9 @@ export default function HomePage() {
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               </AnimatePresence>
-              {/* clear-coat highlight */}
+              {/* clear-coat highlight, plus a gloss sweep each time a new paint lands */}
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,rgb(255_255_255/0.18),transparent_32%)]" />
+              <span key={`sheen-${selected}`} className="sheen-sweep" aria-hidden="true" />
               {group?.hero && (
                 <Link
                   to={`/cars/${group.hero._id}`}
@@ -250,21 +253,22 @@ export default function HomePage() {
                 const activeIndex = all.findIndex((x) => x.type === selected);
                 const tilt = active ? 0 : (i < activeIndex ? -1 : 1) * (2 + Math.min(Math.abs(i - activeIndex), 3));
                 return (
-                  <button
+                  <div
                     key={g.type}
+                    className={`enter-deal flex-shrink-0 ${i > 0 ? '-ml-2' : ''}`}
+                    style={{ '--d': `${450 + i * 70}ms`, '--tilt': `${(i % 2 ? 1 : -1) * 4}deg`, zIndex: 20 - Math.abs(i - activeIndex), position: 'relative' }}
+                  >
+                  <button
                     type="button"
                     role="radio"
                     aria-checked={active}
                     onClick={(e) => choose(g.type, e)}
                     style={{
                       ...paintStyle(g.type),
-                      zIndex: 20 - Math.abs(i - activeIndex),
                       transform: `translateY(${active ? -14 : 10}px) rotate(${tilt}deg)`,
                       transformOrigin: 'bottom center',
                     }}
-                    className={`lacquer relative flex h-32 w-[150px] flex-shrink-0 flex-col justify-between rounded-t-[18px] border border-b-0 border-white/25 pl-5 pr-4 pt-3.5 pb-7 text-left shadow-chip transition-transform duration-500 ease-out sm:w-[172px] ${
-                      i > 0 ? '-ml-2' : ''
-                    }`}
+                    className={`lacquer relative flex h-32 w-[150px] flex-shrink-0 flex-col justify-between rounded-t-[18px] border border-b-0 border-white/25 pl-5 pr-4 pt-3.5 pb-7 text-left shadow-chip transition-transform duration-500 ease-out sm:w-[172px]`}
                   >
                     <span className="code-label text-[11px]">Paint {p.no}</span>
                     <span>
@@ -275,6 +279,7 @@ export default function HomePage() {
                     </span>
                     {active && <span className="absolute right-3.5 top-3.5 h-2.5 w-2.5 rounded-full bg-on-paint" aria-hidden="true" />}
                   </button>
+                  </div>
                 );
               })}
             </div>
@@ -299,11 +304,13 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [...Array(3)].map((_, i) => <div key={i} className="skeleton aspect-[4/5] rounded-chip" />)
-            : (group?.list || []).slice(0, 6).map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
-        </div>
+        {loading ? (
+          <CarGridSkeleton count={3} className="mt-10" />
+        ) : (
+          <Reveal key={selected} wrap cellClassName="h-full" stagger={80} className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {(group?.list || []).slice(0, 6).map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
+          </Reveal>
+        )}
       </section>
 
       {/* ─────────────── How a booking goes: the axis itself, paint to car to keys ─────────────── */}
@@ -315,7 +322,7 @@ export default function HomePage() {
               Booking takes about two minutes. Pay online now, or pay in cash when you collect the car.
             </p>
           </div>
-          <ol className="mt-10 grid gap-4 md:grid-cols-3">
+          <Reveal as="ol" variant="deal" stagger={140} className="mt-10 grid gap-4 md:grid-cols-3">
             <li style={paintStyle(selected)} className="lacquer on-paint flex min-h-[260px] flex-col justify-between rounded-chip rounded-bl-[56px] p-7 shadow-chip">
               <span className="font-wide font-black text-5xl" aria-hidden="true">1</span>
               <span>
@@ -342,7 +349,7 @@ export default function HomePage() {
                 </span>
               </span>
             </li>
-          </ol>
+          </Reveal>
         </div>
       </section>
 
@@ -357,7 +364,7 @@ export default function HomePage() {
               {group.hero.averageRating} from {group.hero.totalReviews} reviews <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <Reveal className="mt-10 grid gap-6 md:grid-cols-3">
             {reviews.slice(0, 3).map((r) => (
               <figure key={r._id} className="flex flex-col rounded-chip border border-line p-7">
                 <StarRating value={r.rating} size="sm" />
@@ -368,7 +375,7 @@ export default function HomePage() {
                 </figcaption>
               </figure>
             ))}
-          </div>
+          </Reveal>
         </section>
       )}
 
@@ -384,7 +391,7 @@ export default function HomePage() {
               Book {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <ul className="grid content-start gap-x-8 sm:grid-cols-2 lg:col-span-7">
+          <Reveal as="ul" variant="slide" stagger={55} className="grid content-start gap-x-8 sm:grid-cols-2 lg:col-span-7">
             {HUBS.map((h) => (
               <li key={h} className="border-b border-on-paint/35">
                 <Link
@@ -396,7 +403,7 @@ export default function HomePage() {
                 </Link>
               </li>
             ))}
-          </ul>
+          </Reveal>
         </div>
       </section>
     </div>

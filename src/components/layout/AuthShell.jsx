@@ -18,8 +18,8 @@ export default function AuthShell({ paint = 'Supercar', title, lead, children })
           {PAINT_ORDER.slice(0, 5).map((t, i) => (
             <span
               key={t}
-              className={`rounded-t-[14px] border border-b-0 border-white/25 ${t === paint ? 'h-36' : 'h-24'}`}
-              style={{ background: PAINTS[t].hex, width: `${64 + (t === paint ? 24 : 0)}px`, transform: `translateY(${i % 2 ? 6 : 0}px)` }}
+              className={`enter-deal rounded-t-[14px] border border-b-0 border-white/25 ${t === paint ? 'h-36' : 'h-24'}`}
+              style={{ background: PAINTS[t].hex, width: `${64 + (t === paint ? 24 : 0)}px`, marginBottom: i % 2 ? -6 : 0, '--d': `${200 + i * 80}ms`, '--tilt': `${i % 2 ? 4 : -4}deg` }}
             />
           ))}
         </div>

@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Search, Download, MessageCircle, Eye, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
-import Spinner from '../../components/ui/Spinner';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import { generatePDF, sendWhatsAppInvoice } from '../../components/invoice/InvoiceGenerator';
+import { TableSkeleton } from '../../components/ui/Skeletons';
 
 const STATUSES = ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
@@ -92,7 +92,7 @@ export default function AdminBookingsPage() {
         </div>
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? <TableSkeleton cols={6} /> : (
         <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

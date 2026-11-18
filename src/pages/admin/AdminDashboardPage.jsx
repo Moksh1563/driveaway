@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { IndianRupee, Car, Calendar, Users, TrendingUp, Clock } from 'lucide-react';
 import api from '../../api/axios';
 import StatCard from '../../components/admin/StatCard';
-import Spinner from '../../components/ui/Spinner';
 import Badge from '../../components/ui/Badge';
 import { sizedImage, handleImageError } from '../../utils/image';
+import { AdminDashboardSkeleton } from '../../components/ui/Skeletons';
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
@@ -15,7 +15,7 @@ export default function AdminDashboardPage() {
     api.get('/admin/dashboard').then(({ data }) => { setStats(data); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex justify-center pt-20"><Spinner size="lg" /></div>;
+  if (loading) return <AdminDashboardSkeleton />;
 
   const maxRev = Math.max(...(stats?.monthlyRevenue?.map(m => m.revenue) || [1]));
 
