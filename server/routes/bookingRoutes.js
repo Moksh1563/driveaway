@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   createBooking, getMyBookings, getBookingById, cancelBooking,
   markPaymentComplete, getAllBookings, updateBookingStatus, deleteBooking,
-  getWhatsAppInvoice
+  getWhatsAppInvoice, getInvoicePdf
 } = require('../controllers/bookingController');
 const { protect } = require('../middleware/authMiddleware');
 const { admin } = require('../middleware/adminMiddleware');
@@ -12,6 +12,7 @@ const { admin } = require('../middleware/adminMiddleware');
 router.get('/my', protect, getMyBookings);
 router.post('/', protect, createBooking);
 router.get('/:id/whatsapp', protect, getWhatsAppInvoice);
+router.get('/:id/invoice', protect, getInvoicePdf);
 router.get('/:id', protect, getBookingById);
 router.patch('/:id/cancel', protect, cancelBooking);
 router.patch('/:id/payment', protect, markPaymentComplete);

@@ -261,6 +261,23 @@ test("another user cannot view, pay or cancel someone else's booking", async () 
   assert.equal(cancel.status, 403);
 });
 
+test('invoice PDF downloads for the owner and admin only', async () => {
+  const res = await fetch(`${BASE}/bookings/${bookingId}/invoice`, { headers: { Authorization: `Bearer ${users.a.token}` } });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'application/pdf');
+  assert.match(res.headers.get('content-disposition'), /attachment; filename="Driveaway_Invoice_DA-\d{4}-\d{6}\.pdf"/);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(bytes.length > 5000);
+
+  const other = await fetch(`${BASE}/bookings/${bookingId}/invoice`, { headers: { Authorization: `Bearer ${users.b.token}` } });
+  assert.equal(other.status, 403);
+  const anon = await fetch(`${BASE}/bookings/${bookingId}/invoice`);
+  assert.equal(anon.status, 401);
+  const asAdmin = await fetch(`${BASE}/bookings/${bookingId}/invoice`, { headers: { Authorization: `Bearer ${adminToken}` } });
+  assert.equal(asAdmin.status, 200);
+});
+
 test('owner can view and pay their booking', async () => {
   const view = await api('GET', `/bookings/${bookingId}`, { token: users.a.token });
   assert.equal(view.status, 200);

@@ -4,7 +4,8 @@ const Car = require('../models/Car');
 const DiscountCode = require('../models/DiscountCode');
 const User = require('../models/User');
 const generateInvoiceNumber = require('../utils/generateInvoiceNumber');
-const { sendBookingConfirmationEmail, sendBookingStatusUpdateEmail } = require('../utils/emailService');
+const { sendBookingConfirmationEmail, sendBookingStatusUpdateEmail, sendPaymentReceivedEmail } = require('../utils/emailService');
+const { buildInvoicePdf, invoiceFilename } = require('../utils/invoicePdf');
 const { triggerCarAvailabilityAlerts } = require('../utils/carAlertService');
 const { escapeRegex } = require('../middleware/securityMiddleware');
 const mongoose = require('mongoose');
@@ -179,6 +180,29 @@ exports.getBookingById = async (req, res) => {
   }
 };
 
+// @desc   Download the PDF invoice (the same file that is attached to booking emails)
+// @route  GET /api/bookings/:id/invoice
+exports.getInvoicePdf = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+      .populate('car', 'name company type dailyRate')
+      .populate('user', 'name email phone');
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    if (booking.user?._id?.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized to view this invoice' });
+    }
+    const pdf = buildInvoicePdf(booking, booking.car);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${invoiceFilename(booking)}"`,
+      'Cache-Control': 'private, no-store',
+    });
+    res.send(pdf);
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 // @desc   Cancel booking
 // @route  PATCH /api/bookings/:id/cancel
 exports.cancelBooking = async (req, res) => {
@@ -223,12 +247,22 @@ exports.markPaymentComplete = async (req, res) => {
     if (req.body.paymentMethod !== undefined && !PAYMENT_METHODS.includes(req.body.paymentMethod)) {
       return res.status(400).json({ message: 'Invalid payment method' });
     }
+    const wasPaid = booking.paymentCompleted;
     booking.paymentCompleted = true;
     booking.paymentCompletedAt = new Date();
     if (typeof req.body.paymentId === 'string') booking.paymentId = req.body.paymentId.slice(0, 64);
     if (req.body.paymentMethod) booking.paymentMethod = req.body.paymentMethod;
     if (booking.status === 'Pending') booking.status = 'Confirmed';
     await booking.save();
+
+    // Email the paid invoice (only the first time it becomes paid)
+    if (!wasPaid) {
+      Booking.findById(booking._id)
+        .populate('car', 'name company type dailyRate')
+        .populate('user', 'name email phone')
+        .then((full) => sendPaymentReceivedEmail({ booking: full, car: full.car, user: full.user }))
+        .catch((err) => console.error('Email send error:', err));
+    }
     res.json(booking);
   } catch (error) {
     handleError(res, error);

@@ -2,6 +2,7 @@ require('dotenv').config();
 const nodemailer = require('nodemailer');
 const { escapeHtml } = require('../middleware/securityMiddleware');
 const { PAINTS, PAINT_ORDER, paintFor } = require('./paints');
+const { buildInvoicePdf, invoiceFilename } = require('./invoicePdf');
 
 // Escape user-controlled booking fields before they are embedded in email HTML
 const safeBooking = (booking) => {
@@ -46,7 +47,7 @@ const parseAddress = (value) => {
   return m ? { name: m[1].trim() || undefined, email: m[2].trim() } : { email: String(value || '').trim() };
 };
 
-const sendWithBrevo = async ({ from: sender, to, subject, html, replyTo }) => {
+const sendWithBrevo = async ({ from: sender, to, subject, html, replyTo, attachments }) => {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
@@ -55,6 +56,9 @@ const sendWithBrevo = async ({ from: sender, to, subject, html, replyTo }) => {
       to: [parseAddress(to)],
       subject,
       htmlContent: html,
+      ...(attachments?.length
+        ? { attachment: attachments.map((a) => ({ name: a.filename, content: Buffer.from(a.content).toString('base64') })) }
+        : {}),
       ...(replyTo ? { replyTo: parseAddress(replyTo) } : {}),
     }),
     signal: AbortSignal.timeout(15000),
@@ -120,6 +124,8 @@ const formatDate = (dateStr) => {
 };
 
 const rupees = (n) => `&#8377;${Number(n || 0).toLocaleString('en-IN')}`;
+const rupeesText = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const paymentLabel = (m) => (m ? String(m).replace(/^Razorpay\b/, 'Online test') : 'Online');
 
 /** "McLaren Senna" stays as is; "Spectre" from Rolls-Royce becomes "Rolls-Royce Spectre". Plain text (for subjects). */
 const carTitleText = (car) => {
@@ -216,7 +222,10 @@ const layout = ({ paint, eyebrow, title, preheader = '', intro = '', body = '', 
 /**
  * Booking confirmation (sent right after a booking is made)
  */
-const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user }) => {
+// Three versions of the booking email, each with the PDF invoice attached:
+//  'booked'  – right after booking: paid online ("Paid. The keys are yours.") or pay at pickup ("Reserved")
+//  'payment' – a booking that was waiting for payment has just been paid
+const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user, variant = 'booked' }) => {
   const booking = safeBooking(rawBooking);
   const carDoc = car || booking.car || {};
   const paint = paintFor(carDoc.type);
@@ -237,7 +246,7 @@ const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user }) => {
       ? row(`Loyalty points (${booking.loyaltyPointsUsed})`, `&minus;${rupees(Math.round(booking.loyaltyPointsUsed / 10))}`, { color: '#15803D' })
       : '',
     row('GST 18% (included)', rupees(gst)),
-    row('Payment', `${booking.paymentMethod || 'Online'} &middot; ${paid ? 'Paid' : 'Pay at pickup'}`),
+    row('Payment', `${escapeHtml(paymentLabel(rawBooking?.paymentMethod))} &middot; ${paid ? 'Paid' : 'Due at pickup'}`),
   ];
 
   const total = `
@@ -250,14 +259,34 @@ const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user }) => {
       </table>
     </td></tr>`;
 
+  const invoiceNo = rawBooking?.invoiceNumber || '';
+  const copy =
+    variant === 'payment'
+      ? {
+          subject: `Payment received: ${rupeesText(totalAmount)} · Invoice ${invoiceNo}`,
+          title: 'Payment<br>received.',
+          intro: `Hi <strong>${name}</strong>, we've received <strong>${rupees(totalAmount)}</strong> for your <strong>${carName}</strong>. Your booking is confirmed and the paid invoice is attached.`,
+        }
+      : paid
+        ? {
+            subject: `Booking confirmed and paid: ${carTitleText(carDoc)} · Invoice ${invoiceNo}`,
+            title: 'Paid. The keys<br>are yours.',
+            intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is booked and paid. Your invoice is attached, and here is everything you need for pickup.`,
+          }
+        : {
+            subject: `Booking reserved, payment pending: ${carTitleText(carDoc)} · Invoice ${invoiceNo}`,
+            title: 'Reserved. Pay<br>at the hub.',
+            intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is reserved. <strong>${rupees(totalAmount)}</strong> is due when you collect it, or pay online any time from My garage. Your invoice is attached.`,
+          };
+
   return {
-    subject: `Booking confirmed: ${carTitleText(carDoc)} · Invoice ${rawBooking?.invoiceNumber || ''}`.trim(),
+    subject: copy.subject.trim(),
     html: layout({
       paint,
       eyebrow: `Invoice ${booking.invoiceNumber || ''}`,
-      title: paid ? 'Paid. The keys<br>are yours.' : 'Reserved. See you<br>at the hub.',
+      title: copy.title,
       preheader: `${carName}, ${formatDate(booking.pickupDate)} to ${formatDate(booking.returnDate)}.`,
-      intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is booked. Here is everything you need for pickup.`,
+      intro: copy.intro,
       body:
         section('Your drive', rows([
           row('Car', carName, { strong: true }),
@@ -269,28 +298,47 @@ const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user }) => {
         section('Fare', rows(fare)) +
         total +
         `<tr><td style="padding:22px 32px 0 32px;font-family:${BODY};font-size:13px;line-height:1.6;color:${MUTED};">
-          Bring your driving licence and an original government ID to the hub. You can download the PDF invoice from <strong style="color:${INK};">My garage</strong> on the website.
+          Bring your driving licence and an original government ID to the hub. The PDF invoice is attached to this email, and you can download it again any time from <strong style="color:${INK};">My garage</strong>.
         </td></tr>`,
     }),
   };
 };
 
-const sendBookingConfirmationEmail = async ({ booking, car, user }) => {
+const invoiceAttachment = (booking, car) => ({
+  filename: invoiceFilename(booking),
+  content: buildInvoicePdf(booking, car),
+  contentType: 'application/pdf',
+});
+
+const sendBookingEmail = async ({ booking, car, user, variant }) => {
   try {
     const transporter = createTransporter();
     if (!transporter) return;
-    const recipient = booking.customerEmail || (user && user.email);
+    const recipient = booking.customerEmail || (user && user.email) || (booking.user && booking.user.email);
     if (!recipient) {
-      console.warn('⚠️ No recipient email found for booking confirmation.');
+      console.warn('⚠️ No recipient email found for booking email.');
       return;
     }
-    const { subject, html } = buildBookingConfirmationEmail({ booking, car, user });
-    const info = await transporter.sendMail({ from: from('Driveaway Rentals'), to: recipient, subject, html });
-    console.log(`✉️ Booking confirmation email sent to ${recipient} (Message ID: ${info.messageId})`);
+    const carDoc = car || booking.car;
+    const { subject, html } = buildBookingConfirmationEmail({ booking, car: carDoc, user, variant });
+    const info = await transporter.sendMail({
+      from: from('Driveaway Rentals'),
+      to: recipient,
+      subject,
+      html,
+      attachments: [invoiceAttachment(booking, carDoc)],
+    });
+    console.log(`✉️ Booking email (${variant}, ${booking.paymentCompleted ? 'paid' : 'payment pending'}) sent to ${recipient} (Message ID: ${info.messageId})`);
   } catch (error) {
-    console.error('❌ Error sending booking confirmation email:', error.message);
+    console.error('❌ Error sending booking email:', error.message);
   }
 };
+
+/** Right after booking: paid online, or reserved with payment pending. Invoice attached. */
+const sendBookingConfirmationEmail = ({ booking, car, user }) => sendBookingEmail({ booking, car, user, variant: 'booked' });
+
+/** A booking that was waiting for payment has been paid. Paid invoice attached. */
+const sendPaymentReceivedEmail = ({ booking, car, user }) => sendBookingEmail({ booking, car, user, variant: 'payment' });
 
 /**
  * Booking status update (admin confirms, completes or cancels)
@@ -494,6 +542,7 @@ const sendContactMessageEmail = async (raw) => {
 
 module.exports = {
   createTransporter,
+  sendPaymentReceivedEmail,
   emailStatus,
   sendTestEmail,
   sendBookingConfirmationEmail,

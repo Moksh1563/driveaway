@@ -1,5 +1,7 @@
-// jsPDF is loaded on demand (only when an invoice is downloaded) to keep page loads fast
-import { PAINTS, PAINT_ORDER, carTitle } from '../../theme/paints';
+// Invoice helpers: the PDF comes from the server; the WhatsApp message is built here.
+import toast from 'react-hot-toast';
+import api from '../../api/axios';
+import { PAINTS, carTitle } from '../../theme/paints';
 import { paymentLabel } from '../../utils/payment';
 
 /**
@@ -105,177 +107,29 @@ export const extractBookingInfo = (booking, car) => {
 };
 
 /**
- * Generate the PDF tax invoice in the Lacquer design: a band in the car category's paint,
- * the eight-paint strip, hairline rules and the total set in the same paint. White page so it prints well.
+ * Download the PDF invoice. The server makes it (server/utils/invoicePdf.js), so the download is
+ * exactly the file attached to the booking emails.
  */
-const rgbOf = (spaceSeparated) => spaceSeparated.split(' ').map(Number);
-const INK = [17, 17, 19];
-const MUTED = [107, 104, 98];
-const LINE = [214, 210, 203];
-// The PDF's built-in fonts have no rupee glyph, so amounts use "Rs".
-const rs = (n) => {
-  const v = Number(n || 0);
-  const digits = Number.isInteger(v) ? 0 : 2;
-  return `Rs ${v.toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+export const generatePDF = async (booking) => {
+  const id = booking?._id;
+  if (!id) return;
+  try {
+    const { data } = await api.get(`/bookings/${id}/invoice`, { responseType: 'blob' });
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Driveaway_Invoice_${booking.invoiceNumber || 'booking'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    toast.error('Could not download the invoice. Please try again.');
+  }
 };
+
+/** Date in the invoice style, used by the WhatsApp message. */
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A');
-
-export const generatePDF = async (booking, car) => {
-  const [{ jsPDF }, { autoTable }] = await Promise.all([
-    import('jspdf'),
-    import('jspdf-autotable'),
-  ]);
-  const info = extractBookingInfo(booking, car);
-  const type = car?.type || booking?.car?.type;
-  const paint = PAINTS[type] ? { ...PAINTS[type], type } : { no: '00', name: 'Driveaway Ink', rgb: '17 17 19', on: '255 255 255', type: null };
-  const P = rgbOf(paint.rgb);
-  const ON = rgbOf(paint.on);
-
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
-  const M = 16; // page margin
-
-  const label = (value, x, y, color = MUTED, align = 'left') => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setCharSpace(0.6);
-    doc.setTextColor(...color);
-    doc.text(value.toUpperCase(), x, y, { align });
-    doc.setCharSpace(0);
-  };
-  const text = (value, x, y, { size = 9.5, bold = false, color = INK, align = 'left' } = {}) => {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    doc.setFontSize(size);
-    doc.setTextColor(...color);
-    doc.text(String(value), x, y, { align });
-  };
-  const hairline = (y) => {
-    doc.setDrawColor(...LINE);
-    doc.setLineWidth(0.25);
-    doc.line(M, y, W - M, y);
-  };
-  const strip = (y, h) => {
-    const w = W / PAINT_ORDER.length;
-    PAINT_ORDER.forEach((t, i) => {
-      doc.setFillColor(...rgbOf(PAINTS[t].rgb));
-      doc.rect(i * w, y, w + 0.2, h, 'F');
-    });
-  };
-
-  // ── Paint band ─────────────────────────────────────────
-  doc.setFillColor(...P);
-  doc.rect(0, 0, W, 54, 'F');
-  text('DRIVEAWAY', M, 17, { size: 15, bold: true, color: ON });
-  label('Tax invoice', W - M, 12, ON, 'right');
-  text(`#${info.invoiceNumber}`, W - M, 18, { size: 10, bold: true, color: ON, align: 'right' });
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
-  let carLines = doc.splitTextToSize(info.fullVehicleName.toUpperCase(), W - 2 * M);
-  if (carLines.length > 1) {
-    doc.setFontSize(21);
-    carLines = doc.splitTextToSize(info.fullVehicleName.toUpperCase(), W - 2 * M).slice(0, 2);
-  }
-  doc.setTextColor(...ON);
-  doc.text(carLines, M, carLines.length > 1 ? 31 : 39);
-  if (paint.type) label(`Paint ${paint.no}  ·  ${paint.type}  ·  ${paint.name}`, M, 47, ON);
-  strip(54, 2.2);
-
-  // ── Issued by / Billed to ──────────────────────────────
-  let y = 68;
-  label('Issued by', M, y);
-  label('Billed to', W / 2 + 4, y);
-  text('Driveaway Luxury Rentals Pvt. Ltd.', M, y + 7, { bold: true });
-  text(info.customerName.length > 34 ? info.customerName.slice(0, 32) + '...' : info.customerName, W / 2 + 4, y + 7, { bold: true });
-  const issuer = ['Shop No. 12, SG Highway, Bodakdev', 'Ahmedabad 380054, Gujarat', 'GSTIN 24DRWAY1234A1Z5', '+91 79-2630-0000 · info@driveaway.in'];
-  const billed = [
-    info.customerPhone !== 'N/A' ? info.customerPhone : null,
-    info.customerEmail !== 'N/A' ? info.customerEmail : null,
-    info.licenseNumber ? `Licence ${info.licenseNumber}` : null,
-    info.address ? info.address.slice(0, 44) : 'Ahmedabad, Gujarat',
-  ].filter(Boolean);
-  issuer.forEach((l, i) => text(l, M, y + 13 + i * 5, { size: 8.5, color: MUTED }));
-  billed.forEach((l, i) => text(l, W / 2 + 4, y + 13 + i * 5, { size: 8.5, color: MUTED }));
-
-  // ── The drive ──────────────────────────────────────────
-  y = 102;
-  hairline(y);
-  const cols = [
-    ['Pickup hub', info.pickupLocation],
-    ['Pickup', fmtDate(info.pickupDate)],
-    ['Return', fmtDate(info.returnDate)],
-    ['Duration', `${info.totalDays} day${info.totalDays > 1 ? 's' : ''}`],
-    ['Issued', fmtDate(info.createdAt)],
-  ];
-  const cw = (W - 2 * M) / cols.length;
-  cols.forEach(([k, v], i) => {
-    label(k, M + i * cw, y + 8);
-    text(v.length > 20 ? v.slice(0, 19) + '...' : v, M + i * cw, y + 14, { size: 9, bold: true });
-  });
-  hairline(y + 20);
-
-  // ── Fare table ─────────────────────────────────────────
-  const body = [[`${info.fullVehicleName}, base fare`, `${info.totalDays} x ${rs(info.dailyRate)}`, rs(info.baseRental)]];
-  if (info.discountAmount > 0) body.push([`Promo code ${info.discountCode || ''}`.trim(), 'Discount', `- ${rs(info.discountAmount)}`]);
-  if (info.loyaltyDiscount > 0) body.push([`Loyalty points (${info.loyaltyPointsUsed})`, 'Redeemed', `- ${rs(info.loyaltyDiscount)}`]);
-  body.push(['Taxable value', '', rs(info.taxableAmount)]);
-  body.push(['CGST 9%', '', rs(info.cgst)]);
-  body.push(['SGST 9%', '', rs(info.sgst)]);
-
-  autoTable(doc, {
-    startY: y + 25,
-    head: [['DESCRIPTION', 'DETAILS', 'AMOUNT']],
-    body,
-    theme: 'plain',
-    margin: { left: M, right: M },
-    styles: { font: 'helvetica', fontSize: 9, textColor: INK, cellPadding: { top: 3, bottom: 3, left: 0, right: 0 }, lineColor: LINE },
-    headStyles: { fontSize: 7, fontStyle: 'bold', textColor: MUTED, lineWidth: { bottom: 0.25 } },
-    bodyStyles: { lineWidth: { bottom: 0.25 } },
-    columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 44, textColor: MUTED }, 2: { halign: 'right', fontStyle: 'bold' } },
-    didParseCell: (d) => {
-      if (d.section === 'head' && d.column.index === 2) d.cell.styles.halign = 'right';
-      if (d.section === 'body' && String(d.cell.raw).startsWith('- ')) d.cell.styles.textColor = [21, 128, 61];
-    },
-  });
-
-  // ── Total in the car's paint ───────────────────────────
-  y = doc.lastAutoTable.finalY + 6;
-  doc.setFillColor(...P);
-  doc.roundedRect(M, y, W - 2 * M, 20, 3, 3, 'F');
-  label(info.paymentCompleted ? 'Total paid (GST included)' : 'Total due at pickup (GST included)', M + 7, y + 11.5, ON);
-  text(rs(info.totalAmount), W - M - 7, y + 13, { size: 17, bold: true, color: ON, align: 'right' });
-
-  y += 27;
-  label('Amount in words', M, y);
-  text(numberToWordsINR(info.totalAmount), M, y + 6, { size: 9 });
-
-  // ── Payment ────────────────────────────────────────────
-  y += 13;
-  hairline(y);
-  const pay = [
-    ['Payment method', info.paymentMethod],
-    ['Reference', info.paymentId.slice(0, 26)],
-    ['Status', info.paymentCompleted ? 'PAID' : 'PAY AT PICKUP'],
-  ];
-  const pw = (W - 2 * M) / 3;
-  pay.forEach(([k, v], i) => {
-    label(k, M + i * pw, y + 8);
-    text(v, M + i * pw, y + 14, { size: 9.5, bold: true, color: i === 2 ? (info.paymentCompleted ? [21, 128, 61] : [180, 83, 9]) : INK });
-  });
-  hairline(y + 20);
-
-  // ── Footer: flows under the content; moves to a new page if it would not fit ──
-  strip(H - 6, 6);
-  if (y + 48 > H) { // the payment block ends at y + 20; the footer needs the last ~28mm
-    doc.addPage();
-    strip(H - 6, 6);
-  }
-  text('Thank you for driving with Driveaway. This is a computer-generated tax invoice and needs no signature.', M, H - 20, { size: 8, color: MUTED });
-  text('Questions? +91 79-2630-0000 · info@driveaway.in · Place of supply: Ahmedabad, Gujarat (24)', M, H - 15, { size: 8, color: MUTED });
-
-  doc.save(`Driveaway_Invoice_${info.invoiceNumber}.pdf`);
-};
 
 /**
  * The public website address used in shared messages. Set VITE_SITE_URL on Vercel to pin it;
