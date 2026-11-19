@@ -4,17 +4,35 @@ import { ArrowUpRight, Bell, Star } from 'lucide-react';
 import { sizedImage, imageSrcSet, handleImageError } from '../../utils/image';
 import { paintFor, paintStyle, rupees } from '../../theme/paints';
 
+// Booking dates are calendar days in India time
+const shortDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+/**
+ * What the card says about availability. `status` is the effective status from the API:
+ * 'Maintenance' (admin took it off the road), 'Rented' (a booking covers today; other dates can
+ * still be booked) or 'Available'.
+ */
+function availability(car) {
+  if (car.status === 'Maintenance') return { tag: 'In maintenance', spoken: 'in maintenance', unlit: true, action: 'Notify me when free', notify: true };
+  if (car.status === 'Rented') {
+    const until = car.nextFreeDate ? `Booked until ${shortDate(car.nextFreeDate)}` : 'Booked today';
+    return { tag: until, spoken: until.charAt(0).toLowerCase() + until.slice(1), unlit: false, action: 'Book other dates', notify: false };
+  }
+  return null;
+}
+
 export default function CarCard({ car, index = 0 }) {
-  const { _id, name, company, type, dailyRate, status, fuelType, transmission, seats, averageRating, totalReviews, images } = car;
+  const { _id, name, company, type, dailyRate, fuelType, transmission, seats, averageRating, totalReviews, images } = car;
   const paint = paintFor(type);
-  const available = status === 'Available';
+  const busy = availability(car);
+  const lit = !busy?.unlit;
 
   return (
     <Link
       to={`/cars/${_id}`}
       style={paintStyle(type)}
       className="group relative flex h-full flex-col overflow-hidden rounded-chip border border-line bg-raised transition-[box-shadow,border-color] duration-150 ease-out hover:border-ink/25 hover:shadow-lift focus-visible:shadow-lift"
-      aria-label={`${name}, ${type}, ${rupees(dailyRate)} per day${available ? '' : `, currently ${status.toLowerCase()}`}`}
+      aria-label={`${name}, ${type}, ${rupees(dailyRate)} per day${busy ? `, ${busy.spoken}` : ''}`}
     >
       <div className="relative aspect-[16/10] overflow-hidden bg-ink/5">
         <img
@@ -27,16 +45,16 @@ export default function CarCard({ car, index = 0 }) {
           loading={index < 3 ? 'eager' : 'lazy'}
           decoding="async"
           onError={(e) => handleImageError(e, 640)}
-          className={`h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] ${available ? '' : 'unlit'}`}
+          className={`h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] ${lit ? '' : 'unlit'}`}
         />
-        {available && <span className="card-sheen" aria-hidden="true" />}
+        {lit && <span className="card-sheen" aria-hidden="true" />}
         {/* Paint chip */}
         <span className="lacquer absolute left-3 top-3 rounded-lg px-2.5 py-1.5 code-label text-[11px] shadow-soft">
           {paint.no} · {type}
         </span>
-        {!available && (
+        {busy && (
           <span className="absolute right-3 top-3 rounded-full bg-[#0C0C0D]/85 px-3 py-1.5 code-label text-[11px] text-white">
-            {status}
+            {busy.tag}
           </span>
         )}
       </div>
@@ -71,8 +89,8 @@ export default function CarCard({ car, index = 0 }) {
           <div className="relative overflow-hidden rounded-xl border border-line">
             <span className="lacquer absolute inset-0 origin-left scale-x-0 transition-transform duration-300 ease-in-out group-hover:scale-x-100 group-focus-visible:scale-x-100" aria-hidden="true" />
             <span className="relative flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors duration-150 group-hover:text-on-paint group-focus-visible:text-on-paint">
-              {available ? 'View and book' : 'Notify me when free'}
-              {available ? <ArrowUpRight className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+              {busy ? busy.action : 'View and book'}
+              {busy?.notify ? <Bell className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
             </span>
           </div>
           <p className="sr-only">{paint.name}</p>

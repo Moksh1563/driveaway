@@ -3,21 +3,34 @@ import { Mail, Phone, CheckCheck, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { TableSkeleton } from '../../components/ui/Skeletons';
+import LoadError from '../../components/admin/LoadError';
+
+// Visitor-typed values go into mailto:/tel: links encoded, so a crafted subject or address cannot add cc/bcc/body
+const mailtoAddress = (email) => encodeURIComponent(String(email || '').trim()).replace(/%40/g, '@');
+const replyHref = (msg) => {
+  const subject = `Re: ${String(msg.subject || 'Your inquiry at Driveaway').replace(/[\r\n]+/g, ' ')}`;
+  return `mailto:${mailtoAddress(msg.email)}?subject=${encodeURIComponent(subject)}`;
+};
+const telHref = (phone) => `tel:${String(phone || '').replace(/[^\d+]/g, '')}`;
 
 export default function AdminMessagesPage() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread' | 'read'
   const [selected, setSelected] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => { fetchMessages(); }, []);
 
   const fetchMessages = async () => {
     setLoading(true);
+    setError('');
     try {
       const { data } = await api.get('/admin/messages');
-      setMessages(data);
-    } catch (e) { console.error(e); }
+      setMessages(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not load messages.');
+    }
     finally { setLoading(false); }
   };
 
@@ -72,7 +85,7 @@ export default function AdminMessagesPage() {
         ))}
       </div>
 
-      {loading ? <TableSkeleton cols={4} /> : (
+      {loading ? <TableSkeleton cols={4} /> : error ? <LoadError message={error} onRetry={fetchMessages} /> : (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[500px]">
           {/* Message list */}
           <div className="lg:col-span-2 space-y-2.5">
@@ -103,7 +116,7 @@ export default function AdminMessagesPage() {
                 {msg.subject && <p className="text-ink text-xs font-semibold mb-1">{msg.subject}</p>}
                 <p className="text-muted text-xs truncate">{msg.message}</p>
                 {msg.isRead && (
-                  <span className="text-green-600 dark:text-green-400 text-[10px] font-bold flex items-center gap-1 mt-1.5">
+                  <span className="text-ok text-[10px] font-bold flex items-center gap-1 mt-1.5">
                     <CheckCheck className="w-3 h-3" /> Read
                   </span>
                 )}
@@ -125,11 +138,11 @@ export default function AdminMessagesPage() {
                         </div>
                         <strong className="text-ink text-sm">{selected.name}</strong>
                       </span>
-                      <a href={`mailto:${selected.email}`} className="flex items-center gap-1 text-ink dark:text-ink hover:underline">
+                      <a href={`mailto:${mailtoAddress(selected.email)}`} className="flex items-center gap-1 text-ink dark:text-ink hover:underline [overflow-wrap:anywhere]">
                         <Mail className="w-3.5 h-3.5" /> {selected.email}
                       </a>
                       {selected.phone && (
-                        <a href={`tel:${selected.phone}`} className="flex items-center gap-1 hover:text-ink">
+                        <a href={telHref(selected.phone)} className="flex items-center gap-1 hover:text-ink">
                           <Phone className="w-3.5 h-3.5" /> {selected.phone}
                         </a>
                       )}
@@ -143,7 +156,7 @@ export default function AdminMessagesPage() {
 
                 <div className="mt-8 pt-4 border-t border-line">
                   <a
-                    href={`mailto:${selected.email}?subject=Re: ${selected.subject || 'Your inquiry at Driveaway'}`}
+                    href={replyHref(selected)}
                     className="inline-flex items-center gap-2 bg-ink hover:bg-ink/85 text-ground font-bold text-sm rounded-full px-6 py-2.5 transition-colors shadow-sm"
                   >
                     <Mail className="w-4 h-4" /> Reply via Email

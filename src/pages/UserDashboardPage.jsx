@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Download, X, MessageCircle, ArrowRight, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -9,8 +9,11 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import StarRating from '../components/ui/StarRating';
 import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceGenerator';
-import TestCheckoutModal from '../components/payment/TestCheckoutModal';
+import PayBookingModal from '../components/booking/PayBookingModal';
+import ProfileTab from '../components/dashboard/ProfileTab';
 import { sizedImage, handleImageError } from '../utils/image';
+import { formatDay } from '../utils/dates';
+import { PAYMENT_TONE, canCancel, canPayOnline, paymentStatus } from '../utils/payment';
 import { paintFor, paintStyle, rupees } from '../theme/paints';
 import Reveal from '../components/ui/Reveal';
 import { BookingRowsSkeleton, GarageRingSkeleton } from '../components/ui/Skeletons';
@@ -18,52 +21,70 @@ import { BookingRowsSkeleton, GarageRingSkeleton } from '../components/ui/Skelet
 const TABS = ['Overview', 'My Bookings', 'Profile'];
 
 export default function UserDashboardPage() {
-  const { user, updateUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState('Overview');
   const [bookings, setBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [bookingsError, setBookingsError] = useState('');
   const [cancelModal, setCancelModal] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const [reviewModal, setReviewModal] = useState(null);
   const [payBooking, setPayBooking] = useState(null);
   const [review, setReview] = useState({ rating: 5, reviewText: '' });
-  const [profileForm, setProfileForm] = useState({
-    name: user?.name || '',
-    phone: user?.phone || '',
-    address: user?.address || '',
-    licenseNumber: user?.licenseNumber || '',
-    drivingExperience: user?.drivingExperience || '',
-    emergencyContact: user?.emergencyContact || '',
-    emergencyPhone: user?.emergencyPhone || ''
-  });
-  const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '' });
-  const [saving, setSaving] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [bookingFilter, setBookingFilter] = useState('All');
+  const request = useRef(0);
+
+  // Points shown in the header change with bookings, so start from a fresh profile
+  useEffect(() => { refreshUser(); }, [refreshUser]);
+
+  const fetchBookings = useCallback(async () => {
+    const n = ++request.current;
+    setBookingsError('');
+    try {
+      const { data } = await api.get('/bookings/my');
+      if (n !== request.current) return;
+      setBookings(data);
+    } catch (err) {
+      if (n !== request.current) return;
+      setBookingsError(err.response?.data?.message || 'Could not load your bookings.');
+    } finally {
+      if (n === request.current) setLoadingBookings(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchBookings();
-  }, []);
+    return () => { request.current += 1; };
+  }, [fetchBookings]);
 
-  const fetchBookings = async () => {
-    try {
-      const { data } = await api.get('/bookings/my');
-      setBookings(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingBookings(false);
-    }
+  const retryBookings = () => {
+    setLoadingBookings(true);
+    fetchBookings();
+  };
+
+  const openCancel = (booking) => {
+    setCancelError('');
+    setCancelReason('');
+    setCancelModal(booking);
   };
 
   const handleCancel = async () => {
+    setCancelling(true);
+    setCancelError('');
     try {
       await api.patch(`/bookings/${cancelModal._id}/cancel`, { reason: cancelReason });
-      toast.success('Booking cancelled');
+      toast.success(cancelModal.paymentCompleted ? 'Booking cancelled. Your payment has been refunded.' : 'Booking cancelled');
       setCancelModal(null);
       setCancelReason('');
       fetchBookings();
+      refreshUser(); // loyalty points used on the booking come back
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to cancel');
+      setCancelError(err.response?.data?.message || 'Failed to cancel');
+      fetchBookings();
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -78,30 +99,11 @@ export default function UserDashboardPage() {
     }
   };
 
-  const handleProfileSave = async () => {
-    setSaving(true);
-    try {
-      const { data } = await api.put('/auth/profile', profileForm);
-      updateUser(data);
-      toast.success('Details saved');
-    } catch {
-      toast.error('Could not save your details');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePasswordChange = async () => {
-    setSaving(true);
-    try {
-      await api.put('/auth/password', pwForm);
-      toast.success('Password changed');
-      setPwForm({ oldPassword: '', newPassword: '' });
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to change password');
-    } finally {
-      setSaving(false);
-    }
+  const handlePaid = () => {
+    setPayBooking(null);
+    toast.success('Payment received');
+    fetchBookings();
+    refreshUser();
   };
 
   const filteredBookings = bookingFilter === 'All' ? bookings : bookings.filter(b => b.status === bookingFilter);
@@ -114,6 +116,16 @@ export default function UserDashboardPage() {
   const firstName = user?.name?.split(' ')[0] || 'Your';
   const points = user?.loyaltyPoints || 0;
   const garage = bookings.filter((b) => b.car && b.status !== 'Cancelled');
+
+  const errorPanel = (
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-4 rounded-chip border border-line p-6">
+      <div>
+        <p className="font-semibold">Could not load your bookings</p>
+        <p className="mt-1 text-sm text-muted">{bookingsError}</p>
+      </div>
+      <button type="button" onClick={retryBookings} className="btn-ink">Try again</button>
+    </div>
+  );
 
   return (
     <div className="pt-[72px]">
@@ -135,6 +147,8 @@ export default function UserDashboardPage() {
           <div className="mt-10">
             {loadingBookings ? (
               <GarageRingSkeleton />
+            ) : bookingsError ? (
+              errorPanel
             ) : garage.length === 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-4 rounded-chip border border-dashed border-line p-6">
                 <p className="text-muted">Your garage is empty. Every car you book parks a paint chip here.</p>
@@ -186,12 +200,12 @@ export default function UserDashboardPage() {
           <div className="grid gap-10 lg:grid-cols-12">
             <div className="min-w-0 lg:col-span-8">
               <h2 className="font-wide font-black uppercase tracking-tight text-xl">Latest bookings</h2>
-              {loadingBookings ? <div className="mt-5"><BookingRowsSkeleton /></div> : bookings.length === 0 ? (
+              {loadingBookings ? <div className="mt-5"><BookingRowsSkeleton /></div> : bookingsError ? <div className="mt-5">{errorPanel}</div> : bookings.length === 0 ? (
                 <p className="mt-5 text-muted">No bookings yet.</p>
               ) : (
                 <Reveal wrap className="mt-5 space-y-4">
                   {bookings.slice(0, 3).map((b) => (
-                    <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} />
+                    <BookingRow key={b._id} booking={b} onCancel={openCancel} onReview={setReviewModal} onPay={setPayBooking} />
                   ))}
                 </Reveal>
               )}
@@ -210,9 +224,10 @@ export default function UserDashboardPage() {
               <div className="mt-6 rounded-chip border border-line p-5 text-sm">
                 <p className="font-semibold">How loyalty points work</p>
                 <ul className="mt-3 space-y-1.5 text-muted">
-                  <li>Earn 1 point for every ₹100 you spend.</li>
+                  <li>Earn 1 point for every ₹100, added when a trip is completed.</li>
                   <li>10 points take ₹1 off at checkout.</li>
                   <li>Use points for up to half of a booking.</li>
+                  <li>Cancel a booking and the points you used come back.</li>
                 </ul>
               </div>
             </aside>
@@ -234,77 +249,39 @@ export default function UserDashboardPage() {
                 </button>
               ))}
             </div>
-            {loadingBookings ? <BookingRowsSkeleton count={4} /> : filteredBookings.length === 0 ? (
+            {loadingBookings ? <BookingRowsSkeleton count={4} /> : bookingsError ? errorPanel : filteredBookings.length === 0 ? (
               <p className="rounded-chip border border-dashed border-line p-12 text-center text-muted">No {bookingFilter === 'All' ? '' : bookingFilter.toLowerCase() + ' '}bookings.</p>
             ) : (
               <Reveal wrap className="space-y-4">
                 {filteredBookings.map((b) => (
-                  <BookingRow key={b._id} booking={b} onCancel={setCancelModal} onReview={setReviewModal} onPay={setPayBooking} full />
+                  <BookingRow key={b._id} booking={b} onCancel={openCancel} onReview={setReviewModal} onPay={setPayBooking} full />
                 ))}
               </Reveal>
             )}
           </div>
         )}
 
-        {activeTab === 'Profile' && (
-          <div className="grid gap-10 lg:grid-cols-12">
-            <form className="lg:col-span-7" onSubmit={(e) => { e.preventDefault(); handleProfileSave(); }}>
-              <h2 className="font-wide font-black uppercase tracking-tight text-xl">Driver details</h2>
-              <p className="mt-2 text-sm text-muted">Saved details pre-fill your next booking.</p>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                {Object.entries({
-                  name: 'Full name',
-                  phone: 'Phone',
-                  licenseNumber: 'Driving licence number',
-                  drivingExperience: 'Years of driving',
-                  emergencyContact: 'Emergency contact',
-                  emergencyPhone: 'Emergency phone',
-                  address: 'Address',
-                }).map(([key, label]) => (
-                  <label key={key} className={`block ${key === 'address' ? 'sm:col-span-2' : ''}`}>
-                    <span className="field-label">{label}</span>
-                    <input
-                      value={profileForm[key] || ''}
-                      onChange={(e) => setProfileForm((p) => ({ ...p, [key]: e.target.value }))}
-                      inputMode={key === 'drivingExperience' ? 'numeric' : undefined}
-                      className="field"
-                    />
-                  </label>
-                ))}
-              </div>
-              <Button type="submit" loading={saving} className="mt-6">Save details</Button>
-            </form>
-
-            <form className="lg:col-span-5" onSubmit={(e) => { e.preventDefault(); handlePasswordChange(); }}>
-              <h2 className="font-wide font-black uppercase tracking-tight text-xl">Password</h2>
-              <p className="mt-2 text-sm text-muted">At least 8 characters, with a letter and a number.</p>
-              <div className="mt-6 space-y-4">
-                <label className="block">
-                  <span className="field-label">Current password</span>
-                  <input type="password" autoComplete="current-password" value={pwForm.oldPassword} onChange={(e) => setPwForm((p) => ({ ...p, oldPassword: e.target.value }))} className="field" />
-                </label>
-                <label className="block">
-                  <span className="field-label">New password</span>
-                  <input type="password" autoComplete="new-password" value={pwForm.newPassword} onChange={(e) => setPwForm((p) => ({ ...p, newPassword: e.target.value }))} className="field" />
-                </label>
-              </div>
-              <Button type="submit" variant="secondary" loading={saving} className="mt-6">Change password</Button>
-            </form>
-          </div>
-        )}
+        {activeTab === 'Profile' && <ProfileTab />}
       </div>
 
-      <Modal isOpen={!!cancelModal} onClose={() => setCancelModal(null)} title="Cancel booking">
+      <Modal isOpen={!!cancelModal} onClose={() => !cancelling && setCancelModal(null)} title="Cancel booking">
         <p className="text-sm text-muted">
           Cancel booking <span className="font-semibold text-ink">{cancelModal?.invoiceNumber}</span> for the {cancelModal?.car?.name}? This cannot be undone.
         </p>
+        {(cancelModal?.paymentCompleted || cancelModal?.loyaltyPointsUsed > 0) && (
+          <ul className="mt-3 space-y-1 text-sm text-muted">
+            {cancelModal?.paymentCompleted && <li>Your payment of {rupees(cancelModal.paidAmount ?? cancelModal.totalAmount)} will be refunded.</li>}
+            {cancelModal?.loyaltyPointsUsed > 0 && <li>The {cancelModal.loyaltyPointsUsed.toLocaleString('en-IN')} loyalty points you used come back to your account.</li>}
+          </ul>
+        )}
         <label className="mt-5 block">
           <span className="field-label">Reason (optional)</span>
           <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={3} maxLength={300} className="field resize-none" />
         </label>
+        {cancelError && <p role="alert" className="mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger dark:text-[#F28B82]">{cancelError}</p>}
         <div className="mt-6 flex gap-3">
-          <Button variant="secondary" onClick={() => setCancelModal(null)} className="flex-1">Keep booking</Button>
-          <Button variant="danger" onClick={handleCancel} className="flex-1">Cancel booking</Button>
+          <Button variant="secondary" onClick={() => setCancelModal(null)} disabled={cancelling} className="flex-1">Keep booking</Button>
+          <Button variant="danger" onClick={handleCancel} loading={cancelling} className="flex-1">Cancel booking</Button>
         </div>
       </Modal>
 
@@ -321,37 +298,20 @@ export default function UserDashboardPage() {
         <Button onClick={handleReview} className="mt-6 w-full !py-4">Post review</Button>
       </Modal>
 
-      <TestCheckoutModal
-        isOpen={!!payBooking}
-        onClose={() => setPayBooking(null)}
-        amount={payBooking?.totalAmount || 0}
-        customerName={payBooking?.customerName || user?.name}
-        customerEmail={payBooking?.customerEmail || user?.email}
-        customerPhone={payBooking?.customerPhone || user?.phone}
-        onPaymentSuccess={async (paymentData) => {
-          try {
-            await api.patch(`/bookings/${payBooking._id}/payment`, {
-              paymentId: paymentData.paymentId,
-              paymentMethod: paymentData.paymentMethod,
-            });
-            toast.success('Payment received');
-            setPayBooking(null);
-            fetchBookings();
-          } catch {
-            toast.error('Payment went through but we could not update the booking. Please contact us.');
-          }
-        }}
-      />
+      {/* Leaving the checkout re-reads the list, in case a failed payment means a booking has changed */}
+      <PayBookingModal booking={payBooking} onClose={() => { setPayBooking(null); fetchBookings(); }} onPaid={handlePaid} />
     </div>
   );
 }
 
-const shortDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const shortDate = (d) => formatDay(d);
 
 function BookingRow({ booking, onCancel, onReview, onPay, full }) {
   const type = booking.car?.type;
   const p = paintFor(type);
   const live = ['Pending', 'Confirmed'].includes(booking.status);
+  const money = paymentStatus(booking);
+  const cancelled = booking.status === 'Cancelled';
   return (
     <article id={`b-${booking._id}`} className="scroll-mt-28 overflow-hidden rounded-chip border border-line bg-surface">
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
@@ -377,15 +337,13 @@ function BookingRow({ booking, onCancel, onReview, onPay, full }) {
             {full && booking.pickupLocation && ` · ${booking.pickupLocation}`}
           </p>
           <p className="mt-2 text-sm">
-            <span className="font-wide font-black text-base">{rupees(booking.totalAmount)}</span>
-            <span className={`ml-2 ${booking.paymentCompleted ? 'text-ok' : 'text-warn'}`}>
-              {booking.paymentCompleted ? 'Paid' : 'Pay at pickup'}
-            </span>
+            <span className={`font-wide font-black text-base ${cancelled ? 'text-muted line-through decoration-2' : ''}`}>{rupees(booking.totalAmount)}</span>
+            <span className={`ml-2 ${PAYMENT_TONE[money.tone]}`}>{money.label}</span>
           </p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3">
-          {!booking.paymentCompleted && booking.status !== 'Cancelled' && onPay && (
+          {canPayOnline(booking) && onPay && (
             <button type="button" onClick={() => onPay(booking)} className="btn-ink !px-4 !py-2.5">
               <CreditCard className="h-4 w-4" /> Pay now
             </button>
@@ -401,7 +359,7 @@ function BookingRow({ booking, onCancel, onReview, onPay, full }) {
               <Star className="h-4 w-4" /> Review
             </button>
           )}
-          {live && (
+          {canCancel(booking) && (
             <button type="button" onClick={() => onCancel(booking)} className="btn-ghost !px-4 !py-2.5 text-danger hover:!bg-danger/10">
               <X className="h-4 w-4" /> Cancel
             </button>

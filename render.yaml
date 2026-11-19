@@ -11,11 +11,15 @@ services:
     rootDir: server
     buildCommand: npm ci
     startCommand: npm start
-    healthCheckPath: /
-    autoDeploy: true
+    healthCheckPath: /api/health   # 200 only while MongoDB is connected
+    # Deploy a pushed commit only once its GitHub checks (.github/workflows/ci.yml) pass.
+    # If that workflow is ever removed, change this to "commit", or deploys stop.
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "24"            # pin the Node major so a platform default change can't break a deploy
       - key: JWT_SECRET
         generateValue: true    # Render creates a long random secret; you never see or type it
       - key: JWT_EXPIRE
@@ -23,9 +27,11 @@ services:
       - key: MONGO_URI
         sync: false            # your MongoDB Atlas connection string
       - key: CLIENT_URL
-        sync: false            # your Vercel site, e.g. https://driveaway.vercel.app
+        sync: false            # your Vercel site, e.g. https://driveaway.vercel.app (CORS and links in emails)
       - key: VERCEL_PROJECT_PREFIX
-        value: driveaway
+        value: driveaway       # https://driveaway.vercel.app is allowed by CORS
+      - key: PUBLIC_API_URL
+        sync: false            # optional: this API's URL, e.g. https://driveaway-api.onrender.com (photo and unsubscribe links)
       # Booking emails. Render's free plan blocks SMTP, so email goes through Brevo's API (free: 300/day).
       - key: BREVO_API_KEY
         sync: false            # from Brevo: SMTP & API -> API keys

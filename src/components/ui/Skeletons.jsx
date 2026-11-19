@@ -357,7 +357,9 @@ export function RouteSkeleton() {
   if (pathname.startsWith('/cars/')) return <CarDetailSkeleton />;
   if (pathname.startsWith('/booking-success')) return <SuccessSkeleton />;
   if (pathname.startsWith('/booking/')) return <BookingSkeleton />;
-  if (pathname === '/login' || pathname === '/register') return <AuthSkeleton />;
+  if (pathname === '/login' || pathname === '/register' || pathname === '/forgot-password' || pathname.startsWith('/reset-password')) {
+    return <AuthSkeleton />;
+  }
   if (pathname.startsWith('/dashboard')) {
     return (
       <div className="pt-[72px]">

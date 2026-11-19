@@ -1,7 +1,9 @@
 const handleError = require('../utils/handleError');
 const Review = require('../models/Review');
 const Booking = require('../models/Booking');
-const Car = require('../models/Car');
+const { recomputeCarRating } = require('../utils/ratings');
+
+// Public responses show the reviewer's display name only, never their login username
 
 // @desc   Create review
 // @route  POST /api/reviews
@@ -32,17 +34,9 @@ exports.createReview = async (req, res) => {
       reviewText: (reviewText || '').trim(),
     });
 
-    // Recalculate average rating in the database (no need to load every review)
-    const [stats] = await Review.aggregate([
-      { $match: { car: booking.car } },
-      { $group: { _id: '$car', avg: { $avg: '$rating' }, count: { $sum: 1 } } },
-    ]);
-    await Car.findByIdAndUpdate(booking.car, {
-      averageRating: stats ? Math.round(stats.avg * 10) / 10 : 0,
-      totalReviews: stats ? stats.count : 0,
-    });
+    await recomputeCarRating(booking.car);
 
-    const populated = await Review.findById(review._id).populate('user', 'name username');
+    const populated = await Review.findById(review._id).populate('user', 'name');
     res.status(201).json(populated);
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ message: 'You have already reviewed this booking' });
@@ -55,7 +49,7 @@ exports.createReview = async (req, res) => {
 exports.getCarReviews = async (req, res) => {
   try {
     const reviews = await Review.find({ car: req.params.carId })
-      .populate('user', 'name username')
+      .populate('user', 'name')
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();

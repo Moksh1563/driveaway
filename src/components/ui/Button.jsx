@@ -8,7 +8,8 @@ const variants = {
   secondary: 'btn-line',
   dark: 'btn-line',
   ghost: 'btn-ghost',
-  danger: 'btn bg-danger text-white hover:brightness-110',
+  // Fixed deep red, not the themed danger text colour: white on it stays 5.7:1 in both themes
+  danger: 'btn bg-[#C81E1E] text-white hover:brightness-110',
 };
 
 const sizes = {

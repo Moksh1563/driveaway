@@ -5,184 +5,342 @@
  * Multi-step car booking workflow:
  *  - Step 1: Trip dates & Ahmedabad pickup hub selection
  *  - Step 2: Driver details & verification credentials
- *  - Step 3: Fare summary, dynamic promo discounts, loyalty points & payment
- * Pay online through the Driveaway test checkout (a simulated payment), or pay at pickup.
+ *  - Step 3: Fare estimate, promo discounts, loyalty points & payment
+ * The server prices and saves every booking unpaid. Paying online then opens the Driveaway test
+ * checkout (a simulated payment) for the saved booking; paying at pickup needs nothing more.
  */
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { ChevronRight, ChevronLeft, Check, Wrench } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
-import TestCheckoutModal from '../components/payment/TestCheckoutModal';
+import PayBookingModal from '../components/booking/PayBookingModal';
+import DriverStep from '../components/booking/DriverStep';
+import { FIELD_CLASS, REQUIRED_DRIVER_FIELDS, OPTIONAL_DRIVER_FIELDS } from '../components/booking/driverFields';
+import FieldError from '../components/booking/FieldError';
+import useFieldErrors, { isEmail, isIndianMobile, isLicence } from '../hooks/useFieldErrors';
+import usePageTitle from '../hooks/usePageTitle';
 import { sizedImage, handleImageError } from '../utils/image';
 import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
 import { HUBS } from '../theme/hubs';
 import { BookingSkeleton } from '../components/ui/Skeletons';
+import { MAX_DAYS_AHEAD, MAX_TRIP_DAYS, addDays, formatDay, isDay, istDay, overlaps, todayIST, tripDays, yearsBefore } from '../utils/dates';
 
 const LOCATIONS = HUBS;
 const PAYMENT_METHODS = [
-  { id: 'Online test', label: 'Pay online now (test)', sublabel: 'A demo checkout: no real money is charged. Confirmed instantly.' },
+  { id: 'Online test', label: 'Pay online now', sublabel: 'UPI, card, net banking or wallet. Confirmed instantly.' },
   { id: 'Cash', label: 'Pay at pickup', sublabel: 'Pay in cash at the hub when you collect the car.' },
 ];
+const STEPS = ['Trip', 'Driver', 'Confirm'];
+const SHORT_DAY = { day: 'numeric', month: 'short' };
+
+// Booking fields pre-filled from the signed-in customer's profile
+const PROFILE_FIELDS = {
+  customerName: 'name', customerPhone: 'phone', customerEmail: 'email', licenseNumber: 'licenseNumber',
+  address: 'address', drivingExperience: 'drivingExperience', idProofType: 'idProofType', idProofNumber: 'idProofNumber',
+  emergencyContact: 'emergencyContact', emergencyPhone: 'emergencyPhone',
+};
+const profileValues = (user) => {
+  const values = {};
+  if (!user) return values;
+  Object.entries(PROFILE_FIELDS).forEach(([key, src]) => {
+    if (user[src] === undefined || user[src] === null || user[src] === '') return;
+    values[key] = src === 'drivingExperience' ? user[src] : String(user[src]);
+  });
+  if (user.dateOfBirth) values.dateOfBirth = istDay(user.dateOfBirth);
+  return values;
+};
+
+const readTrip = () => {
+  try { return JSON.parse(sessionStorage.getItem('driveaway_trip') || '{}'); } catch { return {}; }
+};
 
 export default function BookingPage() {
 
   const { carId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [step, setStep] = useState(1);
   const [car, setCar] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState('loading'); // loading | ready | notfound | error
+  const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null); // { status, message } from POST /bookings
+  const [created, setCreated] = useState(null); // saved booking waiting for its test payment
   const [discountLoading, setDiscountLoading] = useState(false);
   const [discountInfo, setDiscountInfo] = useState(null);
+  const { errors, field, errorId, clear, check, setErrors } = useFieldErrors('booking');
+  const stepTop = useRef(null);
 
-  const trip = (() => {
-    try { return JSON.parse(sessionStorage.getItem('driveaway_trip') || '{}'); } catch { return {}; }
-  })();
-  const [form, setForm] = useState({
-    pickupDate: trip.from || '',
-    returnDate: trip.to || '',
-    pickupLocation: HUBS.includes(trip.location) ? trip.location : '',
-    paymentMethod: 'Online test',
-    discountCode: '',
-    useLoyaltyPoints: false,
-    customerName: user?.name || '',
-    customerPhone: user?.phone || '',
-    customerEmail: user?.email || '',
-    licenseNumber: user?.licenseNumber || '',
-    dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split('T')[0] : '',
-    address: user?.address || '',
-    drivingExperience: user?.drivingExperience || '',
-    idProofType: user?.idProofType || '',
-    idProofNumber: user?.idProofNumber || '',
-    emergencyContact: user?.emergencyContact || '',
-    emergencyPhone: user?.emergencyPhone || '',
-    specialRequirements: '',
+  const [form, setForm] = useState(() => {
+    const trip = readTrip();
+    return {
+      pickupDate: isDay(trip.from) ? trip.from : '',
+      returnDate: isDay(trip.to) ? trip.to : '',
+      pickupLocation: HUBS.includes(trip.location) ? trip.location : '',
+      paymentMethod: 'Online test',
+      discountCode: '',
+      useLoyaltyPoints: false,
+      customerName: '',
+      customerPhone: '',
+      customerEmail: '',
+      licenseNumber: '',
+      dateOfBirth: '',
+      address: '',
+      drivingExperience: '',
+      idProofType: '',
+      idProofNumber: '',
+      emergencyContact: '',
+      emergencyPhone: '',
+      specialRequirements: '',
+      ...profileValues(user),
+    };
   });
 
+  usePageTitle(car ? `Book the ${car.name}` : null);
+
+  // Loyalty points change with every booking: price the estimate from a fresh profile
+  useEffect(() => { refreshUser(); }, [refreshUser]);
+
+  // Once the full profile is in (the saved session only keeps name and email), fill any empty fields
+  const prefilled = useRef(false);
   useEffect(() => {
-    const fetch = async () => {
-      try {
-        const { data } = await api.get(`/cars/${carId}`);
-        setCar(data.car);
-      } catch {
-        toast.error('Car not found');
-        navigate('/fleet');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, [carId, navigate]);
+    if (prefilled.current || !user || !('loyaltyPoints' in user)) return;
+    prefilled.current = true;
+    const values = profileValues(user);
+    setForm((p) => {
+      const next = { ...p };
+      Object.entries(values).forEach(([k, v]) => { if (next[k] === '' || next[k] === undefined) next[k] = v; });
+      return next;
+    });
+  }, [user]);
 
-  const totalDays = (() => {
-    if (!form.pickupDate || !form.returnDate) return 0;
-    const diff = Math.ceil((new Date(form.returnDate) - new Date(form.pickupDate)) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  })();
+  // quiet: refresh the car (booked dates, status) in place without the loading or error screens
+  const carRequest = useRef(0);
+  const loadCar = useCallback(async (quiet = false) => {
+    const n = ++carRequest.current;
+    if (!quiet) setLoadState('loading');
+    try {
+      const { data } = await api.get(`/cars/${carId}`);
+      if (n !== carRequest.current) return;
+      setCar(data.car);
+      setLoadState('ready');
+    } catch (err) {
+      if (n !== carRequest.current || quiet) return;
+      const status = err.response?.status;
+      setLoadError(err.response?.data?.message || 'Could not load this car.');
+      setLoadState(status === 404 || status === 400 ? 'notfound' : 'error');
+    }
+  }, [carId]);
 
+  useEffect(() => {
+    loadCar();
+    return () => { carRequest.current += 1; };
+  }, [loadCar]);
+
+  // A new step starts at its top, not wherever the last one was scrolled to, and without an old error
+  useEffect(() => {
+    setSubmitError(null);
+    const el = stepTop.current;
+    if (el && el.getBoundingClientRect().top < 72) el.scrollIntoView({ block: 'start' });
+  }, [step]);
+
+  // ---- Estimate (the server prices the booking; this mirrors its rules) ----
+  const totalDays = tripDays(form.pickupDate, form.returnDate);
   const baseAmount = car ? totalDays * car.dailyRate : 0;
-  const discountAmount = discountInfo ? Math.min(baseAmount * discountInfo.percentageOff / 100, discountInfo.maxDiscount || Infinity) : 0;
-  const loyaltyDiscount = form.useLoyaltyPoints && user ? Math.min(user.loyaltyPoints / 10, (baseAmount - discountAmount) * 0.5) : 0;
-  const totalAmount = Math.max(0, baseAmount - discountAmount - loyaltyDiscount);
+  const promoMin = discountInfo?.minAmount || 0;
+  const promoActive = Boolean(discountInfo) && baseAmount > 0 && baseAmount >= promoMin;
+  // Same rounding as the server: promo in whole rupees, loyalty rounded down to whole rupees
+  const discountAmount = promoActive
+    ? Math.max(0, Math.min(baseAmount, Math.round(Math.min((baseAmount * discountInfo.percentageOff) / 100, discountInfo.maxDiscount || Infinity))))
+    : 0;
+  const points = user?.loyaltyPoints || 0;
+  const loyaltyDiscount = form.useLoyaltyPoints && points > 0 ? Math.floor(Math.min(points / 10, (baseAmount - discountAmount) * 0.5)) : 0;
+  const totalAmount = Math.max(0, Math.round(baseAmount - discountAmount - loyaltyDiscount));
+  // Once the booking is saved, show the server's figures: spending the points refreshes the balance, which
+  // would otherwise shrink the estimate behind the open checkout.
+  const fare = created
+    ? { discountAmount: created.discountAmount || 0, loyaltyDiscount: created.loyaltyDiscount || 0, totalAmount: created.totalAmount }
+    : { discountAmount, loyaltyDiscount, totalAmount };
+
+  // ---- Dates already taken (half-open: free again on the return day) ----
+  const booked = useMemo(
+    () => (car?.bookedRanges || [])
+      .map((r) => ({ from: istDay(r.pickupDate), to: istDay(r.returnDate) }))
+      .filter((r) => r.from && r.to),
+    [car]
+  );
+  const clash = totalDays > 0 ? booked.find((r) => overlaps(r.from, r.to, form.pickupDate, form.returnDate)) : null;
+
+  const today = todayIST();
+  const lastPickup = addDays(today, MAX_DAYS_AHEAD);
+  const dobMax = yearsBefore(today, 18);
+
+  const set = (key) => (e) => {
+    const value = e.target.value;
+    setForm((p) => ({ ...p, [key]: value }));
+    clear(key);
+    // The overlap message sits on the pickup date but depends on both dates
+    if (key === 'returnDate') clear('pickupDate');
+    if (key === 'pickupDate') clear('returnDate');
+  };
 
   const handleApplyDiscount = async () => {
-    if (!form.discountCode) return;
+    const code = form.discountCode.trim();
+    if (!code) return;
     setDiscountLoading(true);
+    clear('discountCode');
     try {
-      const { data } = await api.post('/discount/validate', { code: form.discountCode });
+      const { data } = await api.post('/discount/validate', { code, subtotal: baseAmount || undefined });
       setDiscountInfo(data);
       toast.success(`${data.percentageOff}% off applied`);
     } catch (err) {
       setDiscountInfo(null);
-      toast.error(err.response?.data?.message || 'Invalid discount code');
+      setErrors((p) => ({ ...p, discountCode: err.response?.data?.message || 'This code is not valid' }));
     } finally {
       setDiscountLoading(false);
     }
   };
 
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-
-  const handleSubmit = (e) => {
-    e?.preventDefault();
-    if (form.paymentMethod === 'Cash') {
-      confirmBooking({ paymentCompleted: false, paymentMethod: 'Cash' });
-    } else {
-      setShowPaymentModal(true);
-    }
-  };
-
-  const handlePaymentSuccess = async (paymentData) => {
-    setShowPaymentModal(false);
-    await confirmBooking({
-      paymentCompleted: true,
-      paymentId: paymentData.paymentId,
-      paymentMethod: paymentData.paymentMethod || 'Online test',
-    });
-  };
-
-  const confirmBooking = async (extraPaymentDetails = {}) => {
-    setSubmitting(true);
-    try {
-      const payload = {
-        car: carId,
-        ...form,
-        useLoyaltyPoints: form.useLoyaltyPoints,
-        discountCode: discountInfo ? form.discountCode : undefined,
-        ...extraPaymentDetails,
-      };
-      const { data } = await api.post('/bookings', payload);
-      toast.success('Booking confirmed');
-      navigate(`/booking-success/${data._id}`);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Booking failed. Please try again.');
-    } finally {
-      setSubmitting(false);
-      setShowPaymentModal(false);
-    }
-  };
-
   const validateStep1 = () => {
-    if (!form.pickupDate || !form.returnDate || !form.pickupLocation) {
-      toast.error('Choose a pickup hub and both dates');
-      return false;
+    const e = {};
+    if (!form.pickupLocation) e.pickupLocation = 'Choose a pickup hub';
+    if (!isDay(form.pickupDate)) e.pickupDate = 'Choose a pickup date';
+    else if (form.pickupDate < today) e.pickupDate = 'Pickup cannot be before today (India time)';
+    else if (form.pickupDate > lastPickup) e.pickupDate = `Pickup can be at most ${MAX_DAYS_AHEAD} days ahead`;
+    if (!isDay(form.returnDate)) e.returnDate = 'Choose a return date';
+    else if (isDay(form.pickupDate) && form.returnDate <= form.pickupDate) e.returnDate = 'Return must be after the pickup date';
+    else if (totalDays > MAX_TRIP_DAYS) e.returnDate = `A trip can last at most ${MAX_TRIP_DAYS} days`;
+    if (!e.pickupDate && !e.returnDate && clash) {
+      e.pickupDate = `Already booked from ${formatDay(clash.from)} to ${formatDay(clash.to)}. Choose dates outside that range.`;
     }
-    if (new Date(form.pickupDate) < new Date(new Date().setHours(0,0,0,0))) {
-      toast.error('Pickup date cannot be in the past');
-      return false;
+    if (form.discountCode.trim() && !discountInfo) {
+      e.discountCode = errors.discountCode || 'Apply this code, or clear it to continue';
+    } else if (discountInfo && promoMin && baseAmount < promoMin) {
+      e.discountCode = `This code needs a rental of at least ${rupees(promoMin)}. Change the dates or clear the code.`;
     }
-    if (new Date(form.returnDate) <= new Date(form.pickupDate)) {
-      toast.error('Return date must be after pickup date');
-      return false;
-    }
-    if (totalDays < 1) {
-      toast.error('Minimum 1 day rental required');
-      return false;
-    }
-    return true;
+    return check(e, ['pickupLocation', 'pickupDate', 'returnDate', 'discountCode']);
   };
 
   const validateStep2 = () => {
-    if (!form.customerName || !form.customerPhone || !form.licenseNumber) {
-      toast.error('Add the driver name, phone and licence number');
-      return false;
+    const e = {};
+    if (form.customerName.trim().length < 2) e.customerName = "Enter the driver's full name";
+    if (!form.customerPhone.trim()) e.customerPhone = 'Enter a mobile number the hub can reach you on';
+    else if (!isIndianMobile(form.customerPhone)) e.customerPhone = 'Enter a 10-digit Indian mobile number, like 98765 43210';
+    if (!form.licenseNumber.trim()) e.licenseNumber = 'Enter the driving licence number';
+    else if (!isLicence(form.licenseNumber)) e.licenseNumber = 'Enter the licence number as printed, like GJ01 2020 0001234';
+    if (form.customerEmail.trim() && !isEmail(form.customerEmail)) e.customerEmail = 'Enter a valid email, like you@example.com';
+    if (form.dateOfBirth) {
+      if (!isDay(form.dateOfBirth) || form.dateOfBirth > today) e.dateOfBirth = 'Enter a real date of birth';
+      else if (form.dateOfBirth > dobMax) e.dateOfBirth = 'The driver must be at least 18';
     }
-    return true;
+    if (form.emergencyPhone.trim() && !isIndianMobile(form.emergencyPhone)) e.emergencyPhone = 'Enter a 10-digit Indian mobile number';
+    return check(e, [...REQUIRED_DRIVER_FIELDS, ...OPTIONAL_DRIVER_FIELDS]);
   };
 
-  if (loading) {
+  const handleSubmit = async () => {
+    if (submitting || created) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const { data } = await api.post('/bookings', {
+        car: carId,
+        ...form,
+        discountCode: discountInfo ? form.discountCode.trim() : undefined,
+        useLoyaltyPoints: form.useLoyaltyPoints && points > 0,
+      });
+      refreshUser(); // points spent on this booking
+      if (form.paymentMethod === 'Cash') {
+        toast.success('Booking reserved');
+        navigate(`/booking-success/${data._id}`);
+        return;
+      }
+      if (Math.round(data.totalAmount) !== totalAmount) toast(`Your final total is ${rupees(data.totalAmount)}.`);
+      setCreated(data);
+    } catch (err) {
+      const status = err.response?.status;
+      const code = err.response?.data?.code;
+      const message = err.response?.data?.message || 'Booking failed. Please try again.';
+      if (status === 409 && code === 'DATES_TAKEN') {
+        // Someone booked these dates first: back to the dates, with the latest booked ranges
+        loadCar(true);
+        setStep(1);
+        check({ pickupDate: message }, ['pickupDate']);
+      } else {
+        // The points balance changed: fetch it again so the fare shown is the one that will be charged
+        if (status === 409 && code === 'POINTS_CHANGED') refreshUser();
+        // Other conflicts (the car or the account is busy for a moment) keep the dates: retry from here
+        if (status === 400) loadCar(true);
+        setSubmitError({ status, message });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // The booking is saved before the checkout opens, so leaving it keeps an unpaid reservation
+  const handleCheckoutClosed = () => {
+    toast('Reserved: you can pay from My bookings');
+    navigate(`/booking-success/${created._id}`);
+  };
+
+  const handlePaid = () => {
+    refreshUser();
+    toast.success('Payment received');
+    navigate(`/booking-success/${created._id}`);
+  };
+
+  if (loadState === 'loading' && !car) {
     return <BookingSkeleton />;
   }
 
-  const STEPS = ['Trip', 'Driver', 'Confirm'];
+  if (!car) {
+    const notFound = loadState === 'notfound';
+    return (
+      <div className="page-container grid min-h-screen place-items-center pt-[72px] text-center">
+        <div role={notFound ? undefined : 'alert'}>
+          <h1 className="display text-5xl">{notFound ? 'Car not found' : 'Could not load this car'}</h1>
+          <p className="mt-4 text-muted">{notFound ? 'It may have left the fleet.' : loadError}</p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {!notFound && <button type="button" onClick={() => loadCar()} className="btn-ink">Try again</button>}
+            <Link to="/fleet" className={notFound ? 'btn-ink' : 'btn-line'}>Back to the fleet</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const paint = paintFor(car.type);
-  const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
-  const today = new Date().toISOString().split('T')[0];
-  const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const inMaintenance = car.status === 'Maintenance' || car.adminStatus === 'Maintenance';
+
+  if (inMaintenance) {
+    return (
+      <div className="pt-[72px]" style={paintStyle(car.type)}>
+        <section className="lacquer on-paint">
+          <div className="page-container py-10">
+            <h1 className="display text-[clamp(2.2rem,5vw,4rem)]">Book the {car.name}</h1>
+            <p className="mt-3 code-label text-[13px]">{car.company} · Paint {paint.no} {paint.name}</p>
+          </div>
+        </section>
+        <div className="page-container py-16">
+          <div className="max-w-xl rounded-chip border border-line p-8">
+            <Wrench className="h-6 w-6 text-warn" aria-hidden="true" />
+            <h2 className="mt-4 font-wide font-black uppercase tracking-tight text-xl">In maintenance right now</h2>
+            <p className="mt-2 text-muted">This car cannot be booked until it is back in service. On its page you can ask us to email you the moment it is free.</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link to={`/cars/${car._id}`} className="btn-ink">See the car</Link>
+              <Link to="/fleet" className="btn-line">Back to the fleet</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const confirmLabel = form.paymentMethod === 'Cash' ? 'Reserve, pay at pickup' : `Reserve and pay ${rupees(fare.totalAmount)}`;
 
   return (
     <div className="pt-[72px]" style={paintStyle(car.type)}>
@@ -214,33 +372,68 @@ export default function BookingPage() {
       </section>
 
       <div className="page-container grid gap-10 py-10 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-8">
+        <div ref={stepTop} className="min-w-0 scroll-mt-24 lg:col-span-8">
           <div key={step} className="step-in">
           {step === 1 && (
             <div className="space-y-10">
               <fieldset>
                 <legend className="font-wide font-black uppercase tracking-tight text-xl">Where and when</legend>
+                {car.bookedNow && car.nextFreeDate && (
+                  <p className="mt-3 text-sm text-muted">Out with another driver until {formatDay(car.nextFreeDate)}. You can book it from that day on.</p>
+                )}
                 <div className="mt-5 grid gap-4 sm:grid-cols-3">
                   <label className="block sm:col-span-3">
                     <span className="field-label">Pickup hub *</span>
-                    <select value={form.pickupLocation} onChange={set('pickupLocation')} className="field">
+                    <select value={form.pickupLocation} onChange={set('pickupLocation')} required {...field('pickupLocation')} className={FIELD_CLASS}>
                       <option value="">Choose a hub</option>
                       {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
                     </select>
+                    <FieldError id={errorId('pickupLocation')}>{errors.pickupLocation}</FieldError>
                   </label>
                   <label className="block">
                     <span className="field-label">Pickup date *</span>
-                    <input type="date" min={today} value={form.pickupDate} onChange={set('pickupDate')} className="field" />
+                    <input type="date" min={today} max={lastPickup} value={form.pickupDate} onChange={set('pickupDate')} required {...field('pickupDate')} className={FIELD_CLASS} />
+                    <FieldError id={errorId('pickupDate')}>{errors.pickupDate}</FieldError>
                   </label>
                   <label className="block">
                     <span className="field-label">Return date *</span>
-                    <input type="date" min={form.pickupDate || today} value={form.returnDate} onChange={set('returnDate')} className="field" />
+                    <input
+                      type="date"
+                      min={isDay(form.pickupDate) ? addDays(form.pickupDate, 1) : addDays(today, 1)}
+                      max={isDay(form.pickupDate) ? addDays(form.pickupDate, MAX_TRIP_DAYS) : undefined}
+                      value={form.returnDate}
+                      onChange={set('returnDate')}
+                      required
+                      {...field('returnDate')}
+                      className={FIELD_CLASS}
+                    />
+                    <FieldError id={errorId('returnDate')}>{errors.returnDate}</FieldError>
                   </label>
-                  <div className="flex flex-col justify-end">
+                  <div className="flex flex-col justify-start sm:pt-[26px]">
                     <p className="rounded-xl bg-ink/[0.05] px-4 py-3 text-sm">
                       {totalDays > 0 ? <><strong>{totalDays}</strong> {totalDays === 1 ? 'day' : 'days'} · {rupees(baseAmount)}</> : <span className="text-muted">Pick your dates</span>}
                     </p>
                   </div>
+                  <div aria-live="polite" className="sm:col-span-3">
+                    {clash && !errors.pickupDate && (
+                      <p className="text-sm font-semibold text-warn">
+                        These dates overlap a booking from {formatDay(clash.from, SHORT_DAY)} to {formatDay(clash.to, SHORT_DAY)}.
+                      </p>
+                    )}
+                  </div>
+                  {booked.length > 0 && (
+                    <div className="rounded-xl border border-line px-4 py-3 text-sm sm:col-span-3">
+                      <p className="font-semibold">Already booked</p>
+                      <ul className="mt-2 flex flex-wrap gap-2">
+                        {booked.map((r) => (
+                          <li key={`${r.from}-${r.to}`} className="rounded-full bg-ink/[0.06] px-3 py-1 text-xs font-semibold">
+                            {formatDay(r.from, SHORT_DAY)} to {formatDay(r.to, SHORT_DAY)}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 text-xs text-muted">The car is free again on each return day, so a new trip can start that day.</p>
+                    </div>
+                  )}
                 </div>
               </fieldset>
 
@@ -282,22 +475,28 @@ export default function BookingPage() {
                         type="text"
                         placeholder="DRIVEAWAY20"
                         value={form.discountCode}
-                        onChange={(e) => { setForm((p) => ({ ...p, discountCode: e.target.value.toUpperCase() })); setDiscountInfo(null); }}
-                        className="field uppercase"
+                        onChange={(e) => { setForm((p) => ({ ...p, discountCode: e.target.value.toUpperCase() })); setDiscountInfo(null); clear('discountCode'); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyDiscount(); } }}
+                        {...field('discountCode')}
+                        className={`${FIELD_CLASS} uppercase`}
                       />
-                      <Button variant="secondary" onClick={handleApplyDiscount} loading={discountLoading} disabled={!form.discountCode} className="flex-shrink-0">
+                      <Button variant="secondary" onClick={handleApplyDiscount} loading={discountLoading} disabled={!form.discountCode.trim()} className="flex-shrink-0">
                         Apply
                       </Button>
                     </div>
-                    {discountInfo ? (
+                    {errors.discountCode ? (
+                      <FieldError id={errorId('discountCode')}>{errors.discountCode}</FieldError>
+                    ) : discountInfo ? (
                       <p className="mt-2 text-sm text-ok">
                         {discountInfo.percentageOff}% off applied{discountInfo.maxDiscount ? `, up to ${rupees(discountInfo.maxDiscount)}` : ''}.
+                        {discountInfo.expiresAt && ` Valid until ${formatDay(discountInfo.expiresAt)}.`}
+                        {promoMin > 0 && !promoActive && <span className="block text-warn">Needs a rental of at least {rupees(promoMin)}.</span>}
                       </p>
                     ) : (
                       <p className="mt-2 text-xs text-muted">Try DRIVEAWAY20, NEWUSER10 or AHMEDABAD15.</p>
                     )}
                   </div>
-                  {user && user.loyaltyPoints > 0 && (
+                  {points > 0 && (
                     <label className={`flex cursor-pointer items-start gap-3 rounded-chip border p-4 ${form.useLoyaltyPoints ? 'border-ink' : 'border-line'}`}>
                       <input
                         type="checkbox"
@@ -306,8 +505,8 @@ export default function BookingPage() {
                         className="mt-0.5 h-5 w-5 rounded border-line bg-raised text-ink focus:ring-ink/30"
                       />
                       <span>
-                        <span className="block font-semibold">Use {user.loyaltyPoints.toLocaleString('en-IN')} loyalty points</span>
-                        <span className="block text-sm text-muted">Worth up to {rupees(Math.floor(user.loyaltyPoints / 10))}, capped at half the booking.</span>
+                        <span className="block font-semibold">Use {points.toLocaleString('en-IN')} loyalty points</span>
+                        <span className="block text-sm text-muted">Worth up to {rupees(Math.floor(points / 10))}, capped at half the booking.</span>
                       </span>
                     </label>
                   )}
@@ -321,33 +520,17 @@ export default function BookingPage() {
           )}
 
           {step === 2 && (
-            <fieldset className="space-y-5">
-              <legend className="font-wide font-black uppercase tracking-tight text-xl">Who is driving</legend>
-              <p className="!mt-2 text-sm text-muted">Bring the same licence and ID when you collect the car. Fields marked * are required.</p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block"><span className="field-label">Full name *</span><input value={form.customerName} onChange={set('customerName')} autoComplete="name" className="field" /></label>
-                <label className="block"><span className="field-label">Phone *</span><input type="tel" value={form.customerPhone} onChange={set('customerPhone')} autoComplete="tel" className="field" /></label>
-                <label className="block sm:col-span-2"><span className="field-label">Email</span><input type="email" value={form.customerEmail} onChange={set('customerEmail')} autoComplete="email" className="field" /></label>
-                <label className="block"><span className="field-label">Driving licence number *</span><input value={form.licenseNumber} onChange={set('licenseNumber')} placeholder="GJ01 2020 0001234" className="field" /></label>
-                <label className="block"><span className="field-label">Date of birth</span><input type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className="field" /></label>
-                <label className="block sm:col-span-2"><span className="field-label">Address</span><input value={form.address} onChange={set('address')} autoComplete="street-address" className="field" /></label>
-                <label className="block">
-                  <span className="field-label">ID proof</span>
-                  <select value={form.idProofType} onChange={set('idProofType')} className="field">
-                    <option value="">Choose an ID</option>
-                    {['Aadhaar Card', 'PAN Card', 'Passport', 'Voter ID'].map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </label>
-                <label className="block"><span className="field-label">ID number</span><input value={form.idProofNumber} onChange={set('idProofNumber')} className="field" /></label>
-                <label className="block"><span className="field-label">Emergency contact</span><input value={form.emergencyContact} onChange={set('emergencyContact')} className="field" /></label>
-                <label className="block"><span className="field-label">Emergency phone</span><input type="tel" value={form.emergencyPhone} onChange={set('emergencyPhone')} className="field" /></label>
-                <label className="block sm:col-span-2"><span className="field-label">Requests</span><textarea rows={3} value={form.specialRequirements} onChange={set('specialRequirements')} placeholder="Airport terminal meet-up, child seat, extra luggage space…" className="field resize-none" /></label>
-              </div>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button variant="secondary" onClick={() => setStep(1)}><ChevronLeft className="h-4 w-4" /> Back</Button>
-                <Button onClick={() => validateStep2() && setStep(3)} className="!px-8">Review booking <ChevronRight className="h-4 w-4" /></Button>
-              </div>
-            </fieldset>
+            <DriverStep
+              form={form}
+              set={set}
+              errors={errors}
+              field={field}
+              errorId={errorId}
+              accountEmail={user?.email}
+              dobMax={dobMax}
+              onBack={() => setStep(1)}
+              onNext={() => validateStep2() && setStep(3)}
+            />
           )}
 
           {step === 3 && (
@@ -357,25 +540,32 @@ export default function BookingPage() {
                 {[
                   ['Car', carTitle(car)],
                   ['Pickup hub', form.pickupLocation],
-                  ['Dates', `${fmt(form.pickupDate)} to ${fmt(form.returnDate)} (${totalDays} ${totalDays === 1 ? 'day' : 'days'})`],
-                  ['Payment', form.paymentMethod === 'Cash' ? 'Cash at pickup' : 'Online now (test checkout, no real charge)'],
+                  ['Dates', `${formatDay(form.pickupDate)} to ${formatDay(form.returnDate)} (${totalDays} ${totalDays === 1 ? 'day' : 'days'})`],
+                  ['Payment', form.paymentMethod === 'Cash' ? 'Cash at pickup' : 'Online now (UPI, card, net banking or wallet)'],
                   ['Driver', form.customerName],
                   ['Licence', form.licenseNumber],
                   ['Phone', form.customerPhone],
-                ].map(([k, v]) => (
+                  ['Confirmation to', user?.email],
+                ].filter(([, v]) => v).map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-6 px-5 py-3.5">
                     <dt className="text-muted">{k}</dt>
-                    <dd className="text-right font-semibold">{v}</dd>
+                    <dd className="min-w-0 break-words text-right font-semibold">{v}</dd>
                   </div>
                 ))}
               </dl>
               <p className="text-sm text-muted">
-                You will earn <strong className="text-ink">{Math.floor(totalAmount / 100).toLocaleString('en-IN')} loyalty points</strong>. Your invoice is ready as soon as you confirm.
+                Loyalty points are added when the trip is completed: about <strong className="text-ink">{Math.floor(fare.totalAmount / 100).toLocaleString('en-IN')} points</strong> for this booking. Your invoice is ready as soon as you confirm.
               </p>
+              {submitError && (
+                <div role="alert" className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger dark:text-[#F28B82]">
+                  <p className="font-semibold">{submitError.message}</p>
+                  {submitError.status === 429 && <Link to="/dashboard" className="mt-1 inline-block underline">Open My bookings</Link>}
+                </div>
+              )}
               <div className="flex flex-wrap gap-3">
-                <Button variant="secondary" onClick={() => setStep(2)}><ChevronLeft className="h-4 w-4" /> Back</Button>
-                <Button variant="paint" onClick={handleSubmit} loading={submitting} className="!px-8 !py-4 text-base">
-                  {form.paymentMethod === 'Cash' ? 'Reserve, pay at pickup' : `Pay ${rupees(Math.round(totalAmount))}`}
+                <Button variant="secondary" onClick={() => setStep(2)} disabled={submitting || Boolean(created)}><ChevronLeft className="h-4 w-4" /> Back</Button>
+                <Button variant="paint" onClick={handleSubmit} loading={submitting} disabled={Boolean(created)} className="!px-8 !py-4 text-base">
+                  {confirmLabel}
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -395,27 +585,19 @@ export default function BookingPage() {
               <div className="flex justify-between"><dt className="text-muted">Daily rate</dt><dd className="font-semibold">{rupees(car.dailyRate)}</dd></div>
               <div className="flex justify-between"><dt className="text-muted">Days</dt><dd className="font-semibold">{totalDays || '–'}</dd></div>
               {totalDays > 0 && <div className="flex justify-between"><dt className="text-muted">Rental</dt><dd className="font-semibold">{rupees(baseAmount)}</dd></div>}
-              {discountAmount > 0 && <div className="flex justify-between text-ok"><dt>Promo {discountInfo?.percentageOff}%</dt><dd>-{rupees(Math.round(discountAmount))}</dd></div>}
-              {loyaltyDiscount > 0 && <div className="flex justify-between text-ok"><dt>Loyalty points</dt><dd>-{rupees(Math.round(loyaltyDiscount))}</dd></div>}
+              {fare.discountAmount > 0 && <div className="flex justify-between text-ok"><dt>Promo {discountInfo?.percentageOff}%</dt><dd>-{rupees(Math.round(fare.discountAmount))}</dd></div>}
+              {fare.loyaltyDiscount > 0 && <div className="flex justify-between text-ok"><dt>Loyalty points</dt><dd>-{rupees(Math.round(fare.loyaltyDiscount))}</dd></div>}
               <div className="flex items-end justify-between border-t border-line pt-4">
-                <dt className="font-semibold">Total</dt>
-                <dd key={Math.round(totalAmount)} className="enter-pop origin-right font-wide font-black text-3xl">{totalDays > 0 ? rupees(Math.round(totalAmount)) : '–'}</dd>
+                <dt className="font-semibold">Estimated total</dt>
+                <dd key={fare.totalAmount} className="enter-pop origin-right font-wide font-black text-3xl">{totalDays > 0 ? rupees(fare.totalAmount) : '–'}</dd>
               </div>
-              <p className="text-xs text-muted">Taxes included. Free cancellation.</p>
+              <p className="text-xs text-muted">Taxes included. The final amount is confirmed when you book. Free cancellation before your pickup day.</p>
             </dl>
           </div>
         </aside>
       </div>
 
-      <TestCheckoutModal
-        isOpen={showPaymentModal}
-        onClose={() => !submitting && setShowPaymentModal(false)}
-        amount={totalAmount}
-        customerName={form.customerName}
-        customerEmail={form.customerEmail}
-        customerPhone={form.customerPhone}
-        onPaymentSuccess={handlePaymentSuccess}
-      />
+      <PayBookingModal booking={created} onClose={handleCheckoutClosed} onPaid={handlePaid} />
     </div>
   );
 }

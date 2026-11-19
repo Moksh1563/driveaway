@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { ArrowRight, ArrowUpRight, MapPin } from 'lucide-react';
 import api from '../api/axios';
 import CarCard from '../components/cars/CarCard';
@@ -13,12 +13,20 @@ import { CarGridSkeleton } from '../components/ui/Skeletons';
 import { EASE } from '../theme/motion';
 
 
-const today = () => new Date().toISOString().split('T')[0];
+// Booking dates are calendar days in India time: "today" is the IST date, pickup at most 180 days
+// ahead, a trip at most 90 days long
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const addDays = (ymd, days) => {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().split('T')[0];
+};
 
 export default function HomePage() {
   const navigate = useNavigate();
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const [paintType, setPaintType] = useState('Hypercar'); // paint currently on the hero ground
   const [selected, setSelected] = useState('Hypercar');   // paint the visitor picked (content follows instantly)
   const [wipe, setWipe] = useState(null);                  // { type, x, key } while the new paint sweeps in
@@ -27,24 +35,34 @@ export default function HomePage() {
   const fanRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false;
-    api.get('/cars', { params: { limit: 100, sort: 'rating' } })
-      .then(({ data }) => { if (!cancelled) setCars(data.cars || []); })
-      .catch(() => {})
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
-  }, []);
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    api.get('/cars', { params: { limit: 100, sort: 'rating' }, signal: controller.signal })
+      .then(({ data }) => { setCars(data.cars || []); setLoading(false); })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err.response?.data?.message || 'Could not load cars.');
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [reloadKey]);
 
-  // Group the real fleet by category, in paint-book order
+  // Group the real fleet by category, in paint-book order. `status` is the effective status:
+  // 'Rented' means a booking covers today (later dates are still bookable), 'Maintenance' means
+  // the team has taken it off the road.
   const book = useMemo(() => {
+    const rank = { Available: 0, Rented: 1, Maintenance: 2 };
     const groups = PAINT_ORDER.map((type) => {
-      // Cars ready to drive first, then the ones out on the road
-      const list = cars.filter((c) => c.type === type).sort((a, b) => (a.status === 'Available' ? 0 : 1) - (b.status === 'Available' ? 0 : 1));
+      // Cars ready to drive first, then the ones out on the road, then the ones in maintenance
+      const list = cars.filter((c) => c.type === type).sort((a, b) => (rank[a.status] ?? 1) - (rank[b.status] ?? 1));
       const ready = list.filter((c) => c.status === 'Available');
       return {
         type,
         list,
         ready,
+        onRoad: list.filter((c) => c.status === 'Rented').length,
+        inMaintenance: list.filter((c) => c.status === 'Maintenance').length,
         from: list.length ? Math.min(...list.map((c) => c.dailyRate)) : 0,
         hero: ready[0] || list[0],
       };
@@ -186,8 +204,14 @@ export default function HomePage() {
                   <input
                     type="date"
                     min={today()}
+                    max={addDays(today(), 180)}
                     value={slip.from}
-                    onChange={(e) => setSlip((s) => ({ ...s, from: e.target.value, to: s.to && s.to <= e.target.value ? '' : s.to }))}
+                    onChange={(e) => setSlip((s) => {
+                      const from = e.target.value;
+                      // Drop a return date that is no longer after pickup or makes the trip too long
+                      const keepTo = s.to && from && s.to > from && s.to <= addDays(from, 90);
+                      return { ...s, from, to: keepTo || !from ? s.to : '' };
+                    })}
                     className="field"
                   />
                 </label>
@@ -196,6 +220,7 @@ export default function HomePage() {
                   <input
                     type="date"
                     min={slip.from || today()}
+                    max={addDays(slip.from || today(), slip.from ? 90 : 270)}
                     value={slip.to}
                     onChange={(e) => setSlip((s) => ({ ...s, to: e.target.value }))}
                     className="field"
@@ -212,7 +237,7 @@ export default function HomePage() {
           <div className="enter order-first lg:order-none lg:col-span-7" style={{ '--d': '120ms' }}>
             <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] rounded-bl-[96px] bg-black/20 shadow-lift lg:aspect-auto lg:h-full lg:min-h-[340px]">
               <AnimatePresence initial={false}>
-                <motion.img
+                <m.img
                   key={heroImg || 'hero'}
                   initial={{ opacity: 0, scale: 1.03 }}
                   animate={{ opacity: 1, scale: 1, transition: { duration: 0.3, delay: 0.22, ease: EASE.out } }}
@@ -306,7 +331,12 @@ export default function HomePage() {
             </h2>
             <p className="mt-3 text-muted">
               {plural(selected)} in {paint.name}
-              {group && group.list.length > group.ready.length ? `, plus ${group.list.length - group.ready.length} out on the road` : ''}.
+              {group && (group.onRoad || group.inMaintenance)
+                ? `, plus ${[
+                  group.onRoad ? `${group.onRoad} out on the road` : '',
+                  group.inMaintenance ? `${group.inMaintenance} in maintenance` : '',
+                ].filter(Boolean).join(' and ')}`
+                : ''}.
             </p>
           </div>
           <Link to={`/fleet?type=${selected}`} className="btn-line">
@@ -316,6 +346,12 @@ export default function HomePage() {
 
         {loading ? (
           <CarGridSkeleton count={3} className="mt-10" />
+        ) : error ? (
+          <div className="mt-10 rounded-chip border border-line p-12 text-center" role="alert">
+            <h3 className="font-wide font-black uppercase text-xl">Could not load the fleet</h3>
+            <p className="mt-2 text-muted">{error}</p>
+            <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="btn-ink mt-6">Try again</button>
+          </div>
         ) : (
           <Reveal wrap cellClassName="h-full" className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {(group?.list || []).slice(0, 6).map((car, i) => <CarCard key={car._id} car={car} index={i} />)}

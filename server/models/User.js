@@ -20,12 +20,27 @@ const userSchema = new mongoose.Schema({
   emergencyPhone:    { type: String, default: '' },
   // Loyalty
   loyaltyPoints:     { type: Number, default: 0 },
+  // Email preferences: true = no promotional emails (offers, broadcasts)
+  marketingOptOut:   { type: Boolean, default: false },
+  // Security: tokens issued before this moment are rejected (set on password change/reset)
+  passwordChangedAt: { type: Date },
+  // Password reset: only the sha256 of the emailed token is stored, never the token itself
+  passwordResetTokenHash: { type: String, select: false },
+  passwordResetExpires:   { type: Date, select: false },
+  // Short-lived lock taken while one of this customer's bookings is checked and saved, so the
+  // unpaid-booking cap and per-customer code limits hold for simultaneous requests. Never sent to clients.
+  bookingLockUntil: { type: Date, select: false },
+  bookingLockToken: { type: String, select: false },
 }, { timestamps: true });
 
-// Never return the password hash unless explicitly asked for
+userSchema.index({ passwordResetTokenHash: 1 }, { sparse: true });
+
+// Never return the password hash or reset token unless explicitly asked for
 userSchema.set('toJSON', {
   transform: (doc, ret) => {
     delete ret.password;
+    delete ret.passwordResetTokenHash;
+    delete ret.passwordResetExpires;
     return ret;
   },
 });

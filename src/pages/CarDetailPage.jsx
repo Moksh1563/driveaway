@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Bell, Shield, MapPin, Sparkles, CalendarX, Star } from 'lucide-react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,8 @@ import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
 import { carTitle, paintFor, paintStyle, pluralLower, rupees } from '../theme/paints';
 import { CarDetailSkeleton } from '../components/ui/Skeletons';
 import { EASE } from '../theme/motion';
+import { formatDay } from '../utils/dates';
+import usePageTitle from '../hooks/usePageTitle';
 
 // Where each spec tag sits around the photo (percent of the frame) and which side its leader line runs to
 const PINS = [
@@ -32,6 +34,8 @@ export default function CarDetailPage() {
   const [car, setCar] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null); // { notFound, message }
+  const [reloadKey, setReloadKey] = useState(0);
   const [activeImage, setActiveImage] = useState('main');
   const [showNotifyModal, setShowNotifyModal] = useState(false);
 
@@ -39,30 +43,48 @@ export default function CarDetailPage() {
     let cancelled = false;
     setLoading(true);
     api.get(`/cars/${id}`)
-      .then(({ data }) => { if (!cancelled) { setCar(data.car); setReviews(data.reviews || []); setActiveImage('main'); } })
-      .catch(() => { if (!cancelled) setCar(null); })
+      .then(({ data }) => { if (!cancelled) { setCar(data.car); setReviews(data.reviews || []); setActiveImage('main'); setLoadError(null); } })
+      .catch((err) => {
+        if (cancelled) return;
+        // Only a 404 (or a malformed id) means the car is gone; anything else is a connection problem
+        const status = err.response?.status;
+        setCar(null);
+        setLoadError({ notFound: status === 404 || status === 400, message: err.response?.data?.message || 'Could not load this car.' });
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, reloadKey]);
+
+  usePageTitle(car ? carTitle(car) : null);
 
   if (loading) {
     return <CarDetailSkeleton />;
   }
 
   if (!car) {
+    const notFound = loadError?.notFound;
     return (
       <div className="page-container grid min-h-screen place-items-center pt-[72px] text-center">
-        <div>
-          <h1 className="display text-5xl">Car not found</h1>
-          <p className="mt-4 text-muted">It may have left the fleet.</p>
-          <Link to="/fleet" className="btn-ink mt-8">Back to the fleet</Link>
+        <div role={notFound ? undefined : 'alert'}>
+          <h1 className="display text-5xl">{notFound ? 'Car not found' : 'Could not load this car'}</h1>
+          <p className="mt-4 text-muted">{notFound ? 'It may have left the fleet.' : loadError?.message}</p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {!notFound && <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="btn-ink">Try again</button>}
+            <Link to="/fleet" className={notFound ? 'btn-ink' : 'btn-line'}>Back to the fleet</Link>
+          </div>
         </div>
       </div>
     );
   }
 
   const paint = paintFor(car.type);
-  const available = car.status === 'Available';
+  // car.status is the effective status: Maintenance (set by the admin), Rented (a booking covers
+  // today) or Available. Only Maintenance stops new bookings; a booked car can take later dates.
+  const inMaintenance = car.status === 'Maintenance' || car.adminStatus === 'Maintenance';
+  const bookedNow = !inMaintenance && (car.bookedNow || car.status === 'Rented');
+  const available = !inMaintenance && !bookedNow;
+  const freeFrom = bookedNow && car.nextFreeDate ? formatDay(car.nextFreeDate, { day: 'numeric', month: 'short' }) : '';
+  const statusNote = inMaintenance ? 'In maintenance' : bookedNow ? (freeFrom ? `Booked until ${freeFrom}` : 'Booked right now') : '';
   const images = ['main', 'img1', 'img2', 'img3', 'img4'].map((key) => ({ key, src: car.images?.[key] })).filter((i) => i.src);
   const currentImage = car.images?.[activeImage] || car.images?.main;
   const credit = (car.imageCredits || []).find((c) => c.url === currentImage);
@@ -108,7 +130,7 @@ export default function CarDetailPage() {
           <div className="relative">
             <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] rounded-bl-[96px] bg-ink/10 shadow-lift">
               <AnimatePresence initial={false}>
-                <motion.img
+                <m.img
                   key={currentImage}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -123,9 +145,9 @@ export default function CarDetailPage() {
                 />
               </AnimatePresence>
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,rgb(255_255_255/0.2),transparent_30%)]" />
-              {!available && (
+              {statusNote && (
                 <span className="absolute left-5 top-5 rounded-full bg-[#0C0C0D]/85 px-3.5 py-2 code-label text-[12px] text-white">
-                  {car.status} right now
+                  {statusNote}
                 </span>
               )}
             </div>
@@ -171,7 +193,12 @@ export default function CarDetailPage() {
           {credit && (
             <p className="mt-3 text-xs text-muted">
               Photo: {credit.author}, {credit.license}, via{' '}
-              <a href={credit.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Wikimedia Commons</a>
+              {/* Only web links become anchors (React still renders javascript: hrefs) */}
+              {/^https?:\/\//i.test(credit.source || '') ? (
+                <a href={credit.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Wikimedia Commons</a>
+              ) : (
+                'Wikimedia Commons'
+              )}
             </p>
           )}
 
@@ -208,14 +235,30 @@ export default function CarDetailPage() {
               </a>
             )}
 
-            {available ? (
+            {available && (
               <button type="button" onClick={book} className="btn-paint mt-6 w-full !py-4 text-base">
                 Book this car <ArrowRight className="h-5 w-5" />
               </button>
-            ) : (
+            )}
+            {bookedNow && (
               <>
                 <p className="mt-6 rounded-xl bg-ink/[0.05] px-4 py-3 text-sm">
-                  This car is <strong>{car.status.toLowerCase()}</strong> right now. We will email you the moment it is free.
+                  {freeFrom
+                    ? <><strong>Booked until {freeFrom}.</strong> You can book it for dates from then on.</>
+                    : <><strong>Booked right now.</strong> You can still book it for later dates.</>}
+                </p>
+                <button type="button" onClick={book} className="btn-paint mt-3 w-full !py-4 text-base">
+                  Book later dates <ArrowRight className="h-5 w-5" />
+                </button>
+                <button type="button" onClick={() => setShowNotifyModal(true)} className="btn-line mt-3 w-full !py-3.5">
+                  <Bell className="h-4 w-4" /> Email me when it is free
+                </button>
+              </>
+            )}
+            {inMaintenance && (
+              <>
+                <p className="mt-6 rounded-xl bg-ink/[0.05] px-4 py-3 text-sm">
+                  This car is <strong>in maintenance</strong> right now. We will email you the moment it is free.
                 </p>
                 <button type="button" onClick={() => setShowNotifyModal(true)} className="btn-ink mt-3 w-full !py-4 text-base">
                   <Bell className="h-5 w-5" /> Notify me when free
@@ -227,7 +270,7 @@ export default function CarDetailPage() {
               <li className="flex items-center gap-3"><Shield className="h-4 w-4 text-muted" /> Zero security deposit</li>
               <li className="flex items-center gap-3"><MapPin className="h-4 w-4 text-muted" /> Pick up at any of 8 Ahmedabad hubs</li>
               <li className="flex items-center gap-3"><Sparkles className="h-4 w-4 text-muted" /> Cleaned and checked before every rental</li>
-              <li className="flex items-center gap-3"><CalendarX className="h-4 w-4 text-muted" /> Free cancellation</li>
+              <li className="flex items-center gap-3"><CalendarX className="h-4 w-4 text-muted" /> Free cancellation before your pickup day</li>
             </ul>
           </div>
         </aside>
@@ -262,6 +305,28 @@ export default function CarDetailPage() {
           )}
         </div>
       </section>
+
+      {/* Phones: price and the main action stay in reach. Sticky inside the page, so it comes to rest
+          above the footer instead of covering it. */}
+      <div className="sticky bottom-0 z-30 border-t border-line bg-ground/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-wide font-black text-xl leading-none">
+              {rupees(car.dailyRate)} <span className="text-sm font-normal text-muted [font-stretch:100%]">per day</span>
+            </p>
+            {statusNote && <p className="mt-1 truncate text-xs text-muted">{statusNote}</p>}
+          </div>
+          {inMaintenance ? (
+            <button type="button" onClick={() => setShowNotifyModal(true)} className="btn-ink flex-shrink-0 !px-5 !py-3">
+              <Bell className="h-4 w-4" /> Notify me
+            </button>
+          ) : (
+            <button type="button" onClick={book} className="btn-paint flex-shrink-0 !px-5 !py-3">
+              {bookedNow ? 'Book later dates' : 'Book this car'} <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

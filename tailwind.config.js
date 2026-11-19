@@ -33,9 +33,11 @@ export default {
           graphite: '#4A4E57',
           lilac: '#7B61C9',
         },
-        ok: '#1E8E4E',
-        warn: '#B7791F',
-        danger: '#C81E1E',
+        // Status colours are theme tokens (index.css), tuned so text-ok / text-warn / text-danger
+        // pass WCAG AA in both themes
+        ok: token('ok'),
+        warn: token('warn'),
+        danger: token('danger'),
       },
       borderRadius: {
         chip: '18px',

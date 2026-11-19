@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { MotionConfig, MotionGlobalConfig } from 'framer-motion'
+import { LazyMotion, MotionConfig, MotionGlobalConfig } from 'framer-motion'
 import App from './App'
 import './index.css'
 import { ThemeProvider } from './context/ThemeContext'
@@ -14,8 +14,13 @@ const applyReducedMotion = () => { MotionGlobalConfig.skipAnimations = reducedMo
 applyReducedMotion()
 reducedMotion.addEventListener?.('change', applyReducedMotion)
 
+// Components use the small `m` element; the animation code itself loads in its own chunk after
+// first paint (strict: a full `motion` element anywhere would throw, so it can't creep back in)
+const loadMotionFeatures = () => import('./theme/motionFeatures').then((mod) => mod.default)
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
+    <LazyMotion features={loadMotionFeatures} strict>
     <MotionConfig reducedMotion="user">
     <ThemeProvider>
       <AuthProvider>
@@ -39,5 +44,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       </AuthProvider>
     </ThemeProvider>
     </MotionConfig>
+    </LazyMotion>
   </BrowserRouter>
 )

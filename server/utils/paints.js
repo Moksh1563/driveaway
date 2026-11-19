@@ -13,8 +13,13 @@ const PAINTS = {
 
 const PAINT_ORDER = ['Hypercar', 'Supercar', 'Luxury', 'SUV', 'Electric', 'Sports', 'Sedan', 'Hatchback'];
 
-/** Paint for a car category; anything unknown (or no car at all) gets the house ink. */
-const paintFor = (type) =>
-  PAINTS[type] ? { ...PAINTS[type], type } : { no: '00', name: 'Driveaway Ink', hex: '#111113', on: '#FFFFFF', type: null };
+/** The house ink, for emails that are not about one car (offers, account, contact, tests). */
+const HOUSE_PAINT = { no: '00', name: 'Driveaway Ink', hex: '#111113', on: '#FFFFFF', type: null };
 
-module.exports = { PAINTS, PAINT_ORDER, paintFor };
+/**
+ * Paint for a car category. An unknown or missing category gets Graphite, the same fallback the
+ * website uses, without a paint label (type: null).
+ */
+const paintFor = (type) => (PAINTS[type] ? { ...PAINTS[type], type } : { ...PAINTS.Sedan, type: null });
+
+module.exports = { PAINTS, PAINT_ORDER, HOUSE_PAINT, paintFor };

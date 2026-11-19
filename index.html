@@ -4,11 +4,31 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Driveaway rents hypercars, supercars and luxury cars in Ahmedabad. Pick a car, choose your pickup hub and dates, and book online in minutes." />
+    <meta name="description" content="Driveaway rents hypercars, supercars and luxury cars in Ahmedabad. Pick a car, choose one of eight pickup hubs and your dates, and book online in minutes." />
     <meta name="theme-color" content="#0C0C0D" />
     <title>Driveaway — Premium Car Rentals Ahmedabad</title>
 
-    <!-- Apply saved theme before first paint (prevents a dark/light flash), and note whether this is the home page -->
+    <!-- Link previews (WhatsApp, social apps, chat tools). Crawlers do not run JavaScript, so these
+         static tags are what every shared link shows. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Driveaway" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:title" content="Driveaway — Premium Car Rentals Ahmedabad" />
+    <meta property="og:description" content="Hypercars, supercars and luxury cars for hire in Ahmedabad. Pick a car, choose a pickup hub and your dates, and book online in minutes." />
+    <meta property="og:image" content="/images/luxury_hypercars_header.webp" />
+    <meta property="og:image:type" content="image/webp" />
+    <meta property="og:image:width" content="1376" />
+    <meta property="og:image:height" content="768" />
+    <meta property="og:image:alt" content="Three hypercars parked in front of a modern house" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Driveaway — Premium Car Rentals Ahmedabad" />
+    <meta name="twitter:description" content="Hypercars, supercars and luxury cars for hire in Ahmedabad. Pick a car, choose a pickup hub and your dates, and book online in minutes." />
+    <meta name="twitter:image" content="/images/luxury_hypercars_header.webp" />
+    <meta name="twitter:image:alt" content="Three hypercars parked in front of a modern house" />
+
+    <!-- Apply saved theme before first paint (prevents a dark/light flash), and note whether this is the home page.
+         vercel.json's Content-Security-Policy allows this script by its sha256 hash: after any change to the
+         text between the script tags, recompute the hash and update script-src there. -->
     <script>
       try {
         var t = localStorage.getItem('driveaway_theme');

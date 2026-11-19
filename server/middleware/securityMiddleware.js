@@ -45,4 +45,63 @@ const escapeHtml = (str) =>
 const isValidEmail = (email) =>
   typeof email === 'string' && email.length <= 254 && /^[^\s@<>"'()]+@[^\s@<>"'()]+\.[^\s@<>"'()]+$/.test(email.trim());
 
-module.exports = { sanitizeInput, escapeRegex, escapeHtml, isValidEmail };
+/* ───────────────── Allowed website origins (CORS + links in emails) ─────────────────
+ *  - CLIENT_URL: the website, or a comma-separated list of them. Matched exactly.
+ *  - https://<VERCEL_PROJECT_PREFIX>.vercel.app (default prefix: driveaway). Matched exactly.
+ *  - Vercel preview deployments only when VERCEL_PREVIEW_SUFFIX is set (e.g. "-myteam.vercel.app"),
+ *    matching ^https://<prefix>-[a-z0-9-]+<suffix>$ exactly. Opt-in, because anyone can name a
+ *    Vercel project to imitate a hostname pattern; exact CLIENT_URL entries are the safe choice.
+ *  - http://localhost:5173 and :3000 for local development.
+ */
+const LOCAL_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
+const escapeForRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const toOrigin = (value) => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return String(value).replace(/\/+$/, '');
+  }
+};
+
+const vercelPrefix = () => (process.env.VERCEL_PROJECT_PREFIX || 'driveaway').trim().toLowerCase();
+
+const clientUrls = () =>
+  String(process.env.CLIENT_URL || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(toOrigin);
+
+// Ordered: CLIENT_URL first, then the likeliest website for this environment
+const allowedOrigins = () => {
+  const vercelSite = /^[a-z0-9-]+$/.test(vercelPrefix()) ? [`https://${vercelPrefix()}.vercel.app`] : [];
+  const rest = process.env.NODE_ENV === 'production' ? [...vercelSite, ...LOCAL_ORIGINS] : [...LOCAL_ORIGINS, ...vercelSite];
+  return [...new Set([...clientUrls(), ...rest])];
+};
+
+let warnedSuffix = false;
+const previewPattern = () => {
+  const suffix = (process.env.VERCEL_PREVIEW_SUFFIX || '').trim().toLowerCase();
+  if (!suffix) return null;
+  // Must name the team ("-myteam.vercel.app"); a bare ".vercel.app" would let any project in
+  if (!/^-[a-z0-9-]+\.vercel\.app$/.test(suffix) || !/^[a-z0-9-]+$/.test(vercelPrefix())) {
+    if (!warnedSuffix) {
+      console.warn(`⚠️ VERCEL_PREVIEW_SUFFIX "${suffix}" ignored: use the form "-<team-slug>.vercel.app"`);
+      warnedSuffix = true;
+    }
+    return null;
+  }
+  return new RegExp(`^https://${escapeForRegex(vercelPrefix())}-[a-z0-9-]+${escapeForRegex(suffix)}$`);
+};
+
+const isAllowedOrigin = (origin) => {
+  if (allowedOrigins().includes(origin)) return true;
+  const preview = previewPattern();
+  return Boolean(preview && preview.test(origin));
+};
+
+// Base URL of the website for links in emails (password reset, availability alerts, offers)
+const clientUrl = () => allowedOrigins()[0] || 'http://localhost:5173';
+
+module.exports = { sanitizeInput, escapeRegex, escapeHtml, isValidEmail, allowedOrigins, isAllowedOrigin, clientUrl };
