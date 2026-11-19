@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, Clock, ArrowRight, Check } from 'lucide-react';
 import api from '../api/axios';
 import Button from '../components/ui/Button';
@@ -26,7 +27,7 @@ export default function ContactPage() {
     setStatus(null);
     try {
       await api.post('/contact', form);
-      setStatus({ ok: true, text: 'Message sent. We usually reply within a few hours.' });
+      setStatus({ ok: true, text: 'Message sent. The team will reply to the email address you gave.' });
       setForm(EMPTY);
     } catch (err) {
       setStatus({ ok: false, text: err.response?.data?.message || 'Could not send your message. Please try again.' });
@@ -63,7 +64,10 @@ export default function ContactPage() {
         <div className="grid gap-12 lg:grid-cols-12">
           <div className="lg:col-span-4">
             <h2 className="font-wide font-black uppercase tracking-tight text-2xl">Send a message</h2>
-            <p className="mt-3 text-muted">Fields marked * are required. We never share your details.</p>
+            <p className="mt-3 text-muted">
+              Fields marked * are required. Your message goes to the Driveaway team only; the{' '}
+              <Link to="/privacy" className="underline hover:text-ink">privacy page</Link> says how it is kept.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:col-span-8">

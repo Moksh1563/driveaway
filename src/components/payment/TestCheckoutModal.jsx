@@ -1,41 +1,36 @@
 /**
- * Driveaway test checkout: a clearly labelled demo of paying online.
- * No money moves and nothing typed here leaves the browser. The card details are fixed test
- * values that cannot be edited, so nobody can enter a real card by mistake.
+ * Driveaway checkout. There is no payment gateway behind it: only the chosen method (UPI, CARD,
+ * NETBANKING or WALLET) goes to the server, which records the payment and makes its reference.
+ * It is styled like a real checkout, but it never asks for a card number, CVV, UPI PIN or OTP, so no
+ * real payment credentials can be typed into it. Cards are offered as a saved card for that reason.
+ *
+ * onPaymentSuccess({ method }) must return a promise: success shows only once it resolves, and a
+ * rejection shows the server's message with Try again and Close. onComplete(result) runs after the
+ * success screen.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { X, Smartphone, CreditCard, Landmark, Wallet, Lock, CheckCircle2, FlaskConical, Loader2 } from 'lucide-react';
+import { AnimatePresence, m } from 'framer-motion';
+import { X, Smartphone, CreditCard, Landmark, Wallet, Lock, CheckCircle2, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { modalMotion, scrimMotion } from '../../theme/motion';
+import useFocusTrap from '../../hooks/useFocusTrap';
 
 const METHODS = [
-  { id: 'upi', label: 'UPI', icon: Smartphone },
-  { id: 'card', label: 'Card', icon: CreditCard },
-  { id: 'netbanking', label: 'Net banking', icon: Landmark },
-  { id: 'wallet', label: 'Wallet', icon: Wallet },
+  { id: 'UPI', label: 'UPI', icon: Smartphone },
+  { id: 'CARD', label: 'Card', icon: CreditCard },
+  { id: 'NETBANKING', label: 'Net banking', icon: Landmark },
+  { id: 'WALLET', label: 'Wallet', icon: Wallet },
 ];
-
-// Fixed demo values (Visa's public test number); shown read-only on purpose
-const TEST_CARD = { number: '4111 1111 1111 1111', expiry: '12/30', cvv: '123' };
-const TEST_UPI = 'success@driveaway';
-const TEST_OTP = '123456';
+const SAVED_CARD = { brand: 'VISA', last4: '7316', expiry: '09/29' };
 const BANKS = ['HDFC Bank', 'State Bank of India', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank'];
 const WALLETS = ['PhonePe', 'Paytm', 'MobiKwik', 'Amazon Pay'];
+const UPI_RE = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/;
 
-const newPaymentId = () => `pay_TEST_${Math.random().toString(36).slice(2, 11).toUpperCase()}`;
-
-function Field({ label, value }) {
-  return (
-    <div>
-      <span className="field-label">{label}</span>
-      <div className="field flex items-center justify-between bg-ink/5 font-mono" aria-readonly="true">
-        {value}
-        <Lock className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-      </div>
-    </div>
-  );
-}
+// "Aarav Shah" -> "aarav.shah@upi", to save typing; the customer can change it
+const upiFromName = (name) => {
+  const handle = String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+  return handle ? `${handle}@upi` : '';
+};
 
 function Choice({ name, options, value, onChange }) {
   return (
@@ -46,60 +41,110 @@ function Choice({ name, options, value, onChange }) {
           className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors ${value === o ? 'border-ink font-semibold' : 'border-line hover:border-ink/40'}`}
         >
           {o}
-          <input type="radio" name={name} checked={value === o} onChange={() => onChange(o)} className="text-ink focus:ring-0" />
+          <input type="radio" name={name} checked={value === o} onChange={() => onChange(o)} className="text-ink focus:ring-0 focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface" />
         </label>
       ))}
     </div>
   );
 }
 
-export default function TestCheckoutModal({ isOpen, onClose, amount = 0, customerName = '', onPaymentSuccess }) {
-  const [method, setMethod] = useState('upi');
-  const [cardName, setCardName] = useState(customerName || 'Test Cardholder');
+export default function TestCheckoutModal({ isOpen, onClose, amount = 0, customerName = '', onPaymentSuccess, onComplete }) {
+  const [method, setMethod] = useState('UPI');
+  const [upiId, setUpiId] = useState(upiFromName(customerName));
   const [bank, setBank] = useState(BANKS[0]);
   const [wallet, setWallet] = useState(WALLETS[0]);
-  const [step, setStep] = useState('form'); // form | processing | otp | success
-  const [otp, setOtp] = useState(TEST_OTP);
-  const [paymentId, setPaymentId] = useState('');
+  const [step, setStep] = useState('form'); // form | processing | saving | success | error
+  const [reference, setReference] = useState('');
+  const [error, setError] = useState('');
+  const titleId = useId();
+  const upiInputId = useId();
+  const dialogRef = useRef(null);
+  const retryRef = useRef(null);
+  const timers = useRef([]);
+  // Bumped on every open, close and unmount, so a late timer or server reply from an earlier
+  // session can never move this one on (or navigate after the page has gone)
+  const session = useRef(0);
+  const handlers = useRef({ onPaymentSuccess, onComplete, onClose });
+  useLayoutEffect(() => {
+    handlers.current = { onPaymentSuccess, onComplete, onClose };
+  });
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setStep('form');
-    setOtp(TEST_OTP);
-    setPaymentId(newPaymentId());
+  const clearTimers = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  };
+  const later = (fn, ms) => {
+    const s = session.current;
+    timers.current.push(setTimeout(() => { if (session.current === s) fn(); }, ms));
+  };
+
+  // A fresh checkout on every open (before paint, so a reopened modal never flashes the last step)
+  useLayoutEffect(() => {
+    session.current += 1;
+    clearTimers();
+    if (isOpen) {
+      setStep('form');
+      setReference('');
+      setError('');
+    }
   }, [isOpen]);
+  useEffect(() => () => {
+    session.current += 1;
+    clearTimers();
+  }, []);
 
-  useEffect(() => { if (customerName) setCardName(customerName); }, [customerName]);
+  useEffect(() => { if (customerName) setUpiId((v) => v || upiFromName(customerName)); }, [customerName]);
 
-  const canClose = step === 'form' || step === 'otp';
+  // No closing while the payment is processing or being recorded, or once it has succeeded
+  const canClose = step === 'form' || step === 'error';
+  useFocusTrap(dialogRef, isOpen, { onEscape: canClose ? onClose : undefined });
+
   useEffect(() => {
     if (!isOpen) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape' && canClose) onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, canClose, onClose]);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
 
-  const succeed = () => {
-    setStep('success');
-    const data = {
-      paymentId,
-      paymentMethod: `Online test (${method.toUpperCase()})`,
-      amount,
-      paidAt: new Date().toISOString(),
-    };
-    setTimeout(() => onPaymentSuccess(data), 1400);
+  // Keep focus somewhere sensible as the steps swap their content
+  useEffect(() => {
+    if (!isOpen) return;
+    if (step === 'error') retryRef.current?.focus();
+    else if (step !== 'form') dialogRef.current?.focus({ preventScroll: true });
+  }, [step, isOpen]);
+
+  const record = async () => {
+    const s = session.current;
+    setStep('saving');
+    try {
+      const result = await handlers.current.onPaymentSuccess?.({ method });
+      if (session.current !== s) return;
+      setReference(result?.paymentId || '');
+      setStep('success');
+      later(() => (handlers.current.onComplete || handlers.current.onClose)?.(result), 1400);
+    } catch (err) {
+      if (session.current !== s) return;
+      setError(err?.response?.data?.message || 'Your payment could not be completed. Please try again.');
+      setStep('error');
+    }
   };
 
-  const pay = () => {
+  const upiValid = UPI_RE.test(upiId.trim());
+  const canPay = method !== 'UPI' || upiValid;
+
+  const pay = (e) => {
+    e?.preventDefault();
+    if (!canPay) return;
     setStep('processing');
-    setTimeout(() => (method === 'card' || method === 'netbanking' ? setStep('otp') : succeed()), 1200);
+    later(record, method === 'UPI' ? 1500 : 1900);
   };
 
-  const confirmOtp = (e) => {
-    e.preventDefault();
-    setStep('processing');
-    setTimeout(succeed, 900);
-  };
+  const processingText = {
+    UPI: 'Processing your UPI payment…',
+    CARD: 'Verifying with your bank…',
+    NETBANKING: `Connecting to ${bank}…`,
+    WALLET: `Connecting to ${wallet}…`,
+  }[method];
 
   const total = `₹${Math.round(amount).toLocaleString('en-IN')}`;
 
@@ -108,18 +153,23 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div role="dialog" aria-modal="true" aria-labelledby="test-checkout-title" className="fixed inset-0 z-[9999] overflow-y-auto p-3 sm:p-6">
-          <motion.div {...scrimMotion} onClick={canClose ? onClose : undefined} className="fixed inset-0 bg-[#0C0C0D]/70" />
+        <div className="fixed inset-0 z-[9999] overflow-y-auto p-3 sm:p-6">
+          <m.div {...scrimMotion} onClick={canClose ? onClose : undefined} className="fixed inset-0 bg-[#0C0C0D]/70" />
           <div className="flex min-h-full items-center justify-center py-4">
-            <motion.div
+            <m.div
               {...modalMotion}
-              className="relative z-10 flex w-full max-w-xl flex-col overflow-hidden rounded-[22px] border border-line bg-surface text-ink shadow-lift"
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              tabIndex={-1}
+              className="relative z-10 flex w-full max-w-xl flex-col overflow-hidden rounded-[22px] border border-line bg-surface text-ink shadow-lift focus:outline-none"
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
                 <div>
                   <p className="code-label text-[11px] text-muted">Driveaway</p>
-                  <h2 id="test-checkout-title" className="font-wide font-black uppercase tracking-tight text-xl">Test checkout</h2>
+                  <h2 id={titleId} className="font-wide font-black uppercase tracking-tight text-xl">Checkout</h2>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="text-right">
@@ -134,17 +184,8 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
                 </div>
               </div>
 
-              {/* The demo notice: always visible, never dismissable */}
-              <div className="flex gap-3 border-b border-line bg-[#F2B705]/15 px-6 py-3 text-sm">
-                <FlaskConical className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
-                <p>
-                  <strong>Demo only. No real money is charged</strong> and nothing here is sent to a bank. The test details are filled in
-                  for you, so never enter a real card or UPI PIN.
-                </p>
-              </div>
-
               {step === 'form' && (
-                <div className="p-6">
+                <form onSubmit={pay} className="p-6">
                   <div className="grid grid-cols-4 gap-2" role="tablist" aria-label="Payment method">
                     {METHODS.map(({ id, label, icon: Icon }) => (
                       <button
@@ -162,81 +203,95 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
                   </div>
 
                   <div className="mt-6 min-h-[188px] space-y-4" role="tabpanel">
-                    {method === 'upi' && (
+                    {method === 'UPI' && (
                       <>
-                        <Field label="Test UPI ID" value={TEST_UPI} />
-                        <p className="text-sm text-muted">The demo approves this payment straight away, the way a UPI app would after you confirm.</p>
+                        <label htmlFor={upiInputId} className="field-label">UPI ID</label>
+                        <input
+                          id={upiInputId}
+                          className="field font-mono"
+                          value={upiId}
+                          onChange={(e) => setUpiId(e.target.value)}
+                          placeholder="yourname@bank"
+                          autoComplete="off"
+                          spellCheck={false}
+                          aria-invalid={upiId.trim() !== '' && !upiValid}
+                          aria-describedby={`${upiInputId}-hint`}
+                        />
+                        <p id={`${upiInputId}-hint`} className={`text-sm ${upiId.trim() !== '' && !upiValid ? 'text-danger' : 'text-muted'}`}>
+                          {upiId.trim() !== '' && !upiValid ? 'Enter a UPI ID like yourname@bank.' : 'The UPI ID linked to your bank account.'}
+                        </p>
                       </>
                     )}
-                    {method === 'card' && (
+                    {method === 'CARD' && (
                       <>
-                        <Field label="Test card number" value={TEST_CARD.number} />
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label="Expiry" value={TEST_CARD.expiry} />
-                          <Field label="CVV" value={TEST_CARD.cvv} />
+                        <span className="field-label">Saved card</span>
+                        <div className="flex items-center justify-between rounded-xl border border-ink px-4 py-4">
+                          <div className="flex items-center gap-4">
+                            <span className="grid h-9 w-14 place-items-center rounded-md bg-ink font-wide text-xs font-black italic tracking-wider text-ground">{SAVED_CARD.brand}</span>
+                            <div>
+                              <p className="font-mono font-semibold">•••• {SAVED_CARD.last4}</p>
+                              <p className="text-sm text-muted">{customerName || 'Cardholder'} · Expires {SAVED_CARD.expiry}</p>
+                            </div>
+                          </div>
+                          <CheckCircle2 className="h-5 w-5" aria-label="Selected" />
                         </div>
-                        <label className="block">
-                          <span className="field-label">Name on card</span>
-                          <input className="field" value={cardName} onChange={(e) => setCardName(e.target.value)} autoComplete="off" />
-                        </label>
+                        <p className="text-sm text-muted">Your bank may ask you to confirm this payment.</p>
                       </>
                     )}
-                    {method === 'netbanking' && <Choice name="bank" options={BANKS} value={bank} onChange={setBank} />}
-                    {method === 'wallet' && <Choice name="wallet" options={WALLETS} value={wallet} onChange={setWallet} />}
+                    {method === 'NETBANKING' && <Choice name="bank" options={BANKS} value={bank} onChange={setBank} />}
+                    {method === 'WALLET' && <Choice name="wallet" options={WALLETS} value={wallet} onChange={setWallet} />}
                   </div>
 
-                  <button type="button" onClick={pay} className="btn-ink mt-6 w-full !py-4 text-base">
-                    Pay {total} (test)
+                  <button type="submit" disabled={!canPay} className="btn-ink mt-6 w-full !py-4 text-base disabled:opacity-50">
+                    Pay {total}
                   </button>
-                </div>
+                </form>
               )}
 
-              {step === 'processing' && (
+              {(step === 'processing' || step === 'saving') && (
                 <div className="grid place-items-center gap-3 px-6 py-16 text-center" role="status">
                   <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
-                  <p className="font-semibold">Simulating the payment…</p>
+                  <p className="font-semibold">{step === 'saving' ? 'Confirming your booking…' : processingText}</p>
+                  <p className="text-sm text-muted">Please don&apos;t close this window.</p>
                 </div>
-              )}
-
-              {step === 'otp' && (
-                <form onSubmit={confirmOtp} className="mx-auto w-full max-w-sm space-y-4 px-6 py-10 text-center">
-                  <h3 className="font-wide font-black uppercase tracking-tight text-lg">Confirm with OTP</h3>
-                  <p className="text-sm text-muted">This step copies a bank's one-time password check. The test code is filled in.</p>
-                  <label className="block">
-                    <span className="sr-only">One-time password</span>
-                    <input
-                      className="field text-center font-mono text-xl tracking-[0.5em]"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    />
-                  </label>
-                  <p className="code-label text-[11px] text-muted">Test OTP: {TEST_OTP}</p>
-                  <button type="submit" className="btn-ink w-full !py-3.5">Confirm {total} (test)</button>
-                </form>
               )}
 
               {step === 'success' && (
                 <div className="grid place-items-center gap-3 px-6 py-14 text-center" role="status">
-                  <motion.span
+                  <m.span
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: 'spring', duration: 0.4, bounce: 0.15 }}
                     className="grid h-16 w-16 place-items-center rounded-full bg-[#1E8E4E]/15 text-[#1E8E4E]"
                   >
                     <CheckCircle2 className="h-9 w-9" />
-                  </motion.span>
-                  <h3 className="font-wide font-black uppercase tracking-tight text-lg">Test payment complete</h3>
-                  <p className="font-mono text-xs text-muted">Reference {paymentId}</p>
-                  <p className="text-sm text-muted">Taking you to your booking…</p>
+                  </m.span>
+                  <h3 className="font-wide font-black uppercase tracking-tight text-lg">Payment successful</h3>
+                  {reference && <p className="font-mono text-xs text-muted">Reference {reference}</p>}
+                  <p className="text-sm text-muted">Your booking is confirmed.</p>
                 </div>
               )}
 
-              <p className="border-t border-line px-6 py-3 text-xs text-muted">
-                Driveaway demo · simulated payment for presentations and testing
+              {step === 'error' && (
+                <div className="grid place-items-center gap-3 px-6 py-12 text-center" role="alert">
+                  <span className="grid h-14 w-14 place-items-center rounded-full bg-danger/10 text-danger">
+                    <AlertCircle className="h-8 w-8" aria-hidden="true" />
+                  </span>
+                  <h3 className="font-wide font-black uppercase tracking-tight text-lg">Payment failed</h3>
+                  <p className="max-w-sm text-sm text-muted">{error}</p>
+                  <div className="mt-3 flex w-full max-w-sm gap-3">
+                    <button type="button" onClick={onClose} className="btn-line flex-1 !py-3.5">Close</button>
+                    <button ref={retryRef} type="button" onClick={record} className="btn-ink flex-1 !py-3.5">Try again</button>
+                  </div>
+                </div>
+              )}
+
+              <p className="flex items-center gap-2 border-t border-line px-6 py-3 text-xs text-muted">
+                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                Paying Driveaway Luxury Rentals, Ahmedabad
+                <ShieldCheck className="ml-auto h-3.5 w-3.5" aria-hidden="true" />
               </p>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       )}

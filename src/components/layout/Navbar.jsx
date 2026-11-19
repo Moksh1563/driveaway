@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Menu, X, LogOut, LayoutDashboard, ChevronDown, Shield, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -68,7 +68,7 @@ export default function Navbar() {
                   <>
                     {l.label}
                     {isActive && (
-                      <motion.span
+                      <m.span
                         layoutId="nav-underline"
                         className="absolute left-1 right-1 -bottom-0.5 h-[3px] rounded-full bg-paint"
                         transition={SPRING}
@@ -107,7 +107,7 @@ export default function Navbar() {
                 </button>
                 <AnimatePresence>
                   {menuOpen && (
-                    <motion.div
+                    <m.div
                       role="menu"
                       {...menuMotion}
                       style={{ transformOrigin: 'top right' }}
@@ -128,7 +128,7 @@ export default function Navbar() {
                       <button role="menuitem" type="button" onClick={handleLogout} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-danger hover:bg-danger/10 text-left">
                         <LogOut className="w-4 h-4" /> Log out
                       </button>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>
@@ -156,7 +156,7 @@ export default function Navbar() {
 
         <AnimatePresence>
           {mobileOpen && (
-            <motion.div
+            <m.div
               {...panelMotion}
               className="md:hidden overflow-hidden border-t border-line bg-ground"
             >
@@ -174,7 +174,8 @@ export default function Navbar() {
                   </NavLink>
                 ))}
                 <div className="pt-4 grid gap-2">
-                  <button type="button" onClick={() => { setMobileOpen(false); setDiscountOpen(true); }} className="btn-line w-full">
+                  {/* The menu stays open behind the dialog, so closing it returns focus to this button */}
+                  <button type="button" onClick={() => setDiscountOpen(true)} className="btn-line w-full">
                     <Tag className="w-4 h-4" /> Get offers and promo codes
                   </button>
                   {user ? (
@@ -191,7 +192,7 @@ export default function Navbar() {
                   )}
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </header>

@@ -1,42 +1,46 @@
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
-// Ensure uploads folder exists
-const uploadDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Files are kept in memory and then saved to MongoDB (see routes/uploadRoutes.js):
+// Render's free plan has no persistent disk.
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_FILES = 5;
 
-// Storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `car-${uniqueSuffix}${ext}`);
-  },
-});
+// Allow-list: the extension AND the declared type must both be one of these
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif']);
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif']);
+const normalizeType = (mimetype) => (mimetype === 'image/jpg' ? 'image/jpeg' : String(mimetype || '').toLowerCase());
 
-// File filter (Only allow image types)
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|webp|gif|avif/;
-  const extName = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimeType = allowedTypes.test(file.mimetype);
-
-  if (extName && mimeType) {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (ALLOWED_EXTENSIONS.has(ext) && ALLOWED_TYPES.has(normalizeType(file.mimetype))) {
     return cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, JPG, PNG, WEBP, GIF, AVIF) are permitted!'));
   }
+  const err = new Error('Only image files (JPEG, JPG, PNG, WEBP, GIF, AVIF) are permitted!');
+  err.code = 'INVALID_FILE_TYPE';
+  return cb(err);
 };
 
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILES, fields: 10, parts: MAX_FILES + 10 },
   fileFilter,
 });
 
+// Friendly text for multer's error codes
+const uploadErrorMessage = (err) => {
+  switch (err && err.code) {
+    case 'LIMIT_FILE_SIZE': return `Each image must be ${MAX_FILE_SIZE / (1024 * 1024)} MB or smaller`;
+    case 'LIMIT_FILE_COUNT': return `You can upload up to ${MAX_FILES} images at once`;
+    case 'LIMIT_UNEXPECTED_FILE': return `Unexpected file field "${err.field}", or more than ${MAX_FILES} images`;
+    case 'LIMIT_PART_COUNT':
+    case 'LIMIT_FIELD_COUNT': return 'Too many form fields in the upload';
+    default: return (err && err.message) || 'Error uploading file';
+  }
+};
+
 module.exports = upload;
+module.exports.normalizeType = normalizeType;
+module.exports.uploadErrorMessage = uploadErrorMessage;
+module.exports.MAX_FILE_SIZE = MAX_FILE_SIZE;
+module.exports.MAX_FILES = MAX_FILES;

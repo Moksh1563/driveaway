@@ -31,7 +31,19 @@ dist-ssr
 # MongoDB Local Data
 .mongodb_data
 
+# Photos uploaded to disk by older versions (new uploads are stored in MongoDB).
+# Nothing needs the folder to exist, so no .gitkeep.
+server/uploads/
+
+# Test coverage output
+coverage/
+
+# Local tool and agent state
 .playwright-mcp
+.claude-flow/
+.swarm/
+.claude/security-scans/
+.claude/settings.local.json
 
 # Impeccable runtime output (keep PRODUCT.md, DESIGN.md, .impeccable/surfaces, design.json)
 .impeccable/mocks/

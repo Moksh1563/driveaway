@@ -1,23 +1,19 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
-const { escapeHtml } = require('../middleware/securityMiddleware');
-const { PAINTS, PAINT_ORDER, paintFor } = require('./paints');
+const User = require('../models/User');
+const { escapeHtml, isValidEmail, clientUrl } = require('../middleware/securityMiddleware');
+const { PAINTS, PAINT_ORDER, HOUSE_PAINT, paintFor } = require('./paints');
 const { buildInvoicePdf, invoiceFilename } = require('./invoicePdf');
-
-// Escape user-controlled booking fields before they are embedded in email HTML
-const safeBooking = (booking) => {
-  const obj = booking && typeof booking.toObject === 'function' ? booking.toObject() : { ...booking };
-  ['customerName', 'pickupLocation', 'discountCode', 'paymentMethod', 'invoiceNumber'].forEach((k) => {
-    if (obj[k] !== undefined && obj[k] !== null) obj[k] = escapeHtml(obj[k]);
-  });
-  return obj;
-};
+const {
+  carTitle: carTitleText, extractBookingInfo, fareLines, formatAmount, formatDate, dayLabel,
+} = require('./invoiceFormat');
 
 /* ───────────────── Sending ─────────────────
  * Two ways to send, picked from the environment:
  *  - BREVO_API_KEY set  -> Brevo's HTTPS API. Use this on Render: its free plan blocks SMTP ports.
  *  - EMAIL_USER + EMAIL_PASS -> Gmail SMTP (fine on your own computer).
  * EMAIL_FROM is the sender address (must be verified in Brevo); EMAIL_TEAM gets contact-form copies.
+ * Every send* function resolves to { sent: true } or { sent: false, error } and never rejects.
  */
 const senderEmail = () => process.env.EMAIL_FROM || process.env.EMAIL_USER || '';
 const teamEmail = () => process.env.EMAIL_TEAM || senderEmail();
@@ -100,13 +96,33 @@ const emailStatus = () => ({
   lastSend: { ...lastSend },
 });
 
+const NOT_SET_UP = 'Email is not set up on the server';
+
+/** Send one email and report the outcome instead of throwing. */
+const deliver = async (what, build) => {
+  try {
+    const transporter = createTransporter();
+    if (!transporter) return { sent: false, error: NOT_SET_UP };
+    const message = await build();
+    if (!message) {
+      console.warn(`⚠️ ${what} email not sent: no valid recipient.`);
+      return { sent: false, error: `No valid recipient for the ${what} email` };
+    }
+    const info = await transporter.sendMail(message);
+    console.log(`✉️ ${what} email sent to ${message.to} (Message ID: ${info.messageId})`);
+    return { sent: true, messageId: info.messageId };
+  } catch (error) {
+    console.error(`❌ Error sending ${what} email:`, error.message);
+    return { sent: false, error: error.message };
+  }
+};
+
 /** Admin "send a test email" check; throws with the provider's reason if it fails. */
 const sendTestEmail = async (to) => {
   const transporter = createTransporter();
-  if (!transporter) throw new Error('Email is not set up on the server (see DEPLOY.md, "Booking emails").');
-  const paint = paintFor(null);
+  if (!transporter) throw new Error(`${NOT_SET_UP} (see DEPLOY.md, "Booking emails").`);
   const html = layout({
-    paint,
+    paint: HOUSE_PAINT,
     eyebrow: 'Test',
     title: 'Email<br>works.',
     intro: `This test came from the Driveaway server using <strong>${transporter.mode === 'brevo' ? 'Brevo' : 'Gmail SMTP'}</strong>. Booking confirmations, status updates and alerts will arrive the same way.`,
@@ -114,27 +130,10 @@ const sendTestEmail = async (to) => {
   return transporter.sendMail({ from: from('Driveaway'), to, subject: 'Driveaway test email', html });
 };
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return 'N/A';
-  try {
-    return new Date(dateStr).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch (e) {
-    return dateStr;
-  }
-};
-
-const rupees = (n) => `&#8377;${Number(n || 0).toLocaleString('en-IN')}`;
-const rupeesText = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const paymentLabel = (m) => (m ? String(m).replace(/^Razorpay\b/, 'Online test') : 'Online');
-
-/** "McLaren Senna" stays as is; "Spectre" from Rolls-Royce becomes "Rolls-Royce Spectre". Plain text (for subjects). */
-const carTitleText = (car) => {
-  const name = (car?.name || '').trim();
-  const company = (car?.company || '').trim();
-  const firstWord = (s) => s.toLowerCase().split(/[\s-]/)[0];
-  return (company && firstWord(name) !== firstWord(company) ? `${company} ${name}` : name) || 'Rental car';
-};
-const carTitle = (car) => escapeHtml(carTitleText(car));
+const rupees = (n) => `&#8377;${formatAmount(n)}`;
+const rupeesText = (n) => `₹${formatAmount(n)}`;
+const carTitle = (car) => escapeHtml(carTitleText(car) || 'Rental car');
+const site = () => clientUrl().replace(/\/+$/, '');
 
 /* ───────────────── Lacquer email kit ─────────────────
  * Same design language as the website: a band in the car category's paint, wide black
@@ -145,6 +144,8 @@ const INK = '#111113';
 const MUTED = '#6B6862';
 const LINE = '#D6D2CB';
 const GROUND = '#ECEAE6';
+const GREEN = '#15803D';
+const RED = '#B91C1C';
 const DISPLAY = "'Archivo', 'Arial Black', 'Helvetica Neue', Arial, sans-serif";
 const BODY = "'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
@@ -173,12 +174,26 @@ const section = (title, inner) => `
     ${inner}
   </td></tr>`;
 
+const note = (html) =>
+  `<tr><td style="padding:22px 32px 0 32px;font-family:${BODY};font-size:13px;line-height:1.6;color:${MUTED};">${html}</td></tr>`;
+
 const button = (href, text, paint) => `
   <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
     <td style="border-radius:999px;background:${paint.hex};">
-      <a href="${href}" style="display:inline-block;padding:15px 30px;font-family:${BODY};font-size:15px;font-weight:700;color:${paint.on};text-decoration:none;border-radius:999px;">${text} &rarr;</a>
+      <a href="${escapeHtml(href)}" style="display:inline-block;padding:15px 30px;font-family:${BODY};font-size:15px;font-weight:700;color:${paint.on};text-decoration:none;border-radius:999px;">${text} &rarr;</a>
     </td>
   </tr></table>`;
+
+/** The big total in the car's paint. */
+const totalBox = (paint, title, amount) => `
+    <tr><td style="padding:20px 32px 0 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${paint.hex};border-radius:14px;">
+        <tr>
+          <td style="padding:18px 22px;">${label(title, paint.on)}</td>
+          <td align="right" style="padding:18px 22px;font-family:${DISPLAY};font-size:28px;font-weight:900;color:${paint.on};">${rupees(amount)}</td>
+        </tr>
+      </table>
+    </td></tr>`;
 
 /** Full email: preheader, paint band with eyebrow + headline, body rows, footer. */
 const layout = ({ paint, eyebrow, title, preheader = '', intro = '', body = '', footer = '' }) => `<!DOCTYPE html>
@@ -219,187 +234,205 @@ const layout = ({ paint, eyebrow, title, preheader = '', intro = '', body = '', 
 </body>
 </html>`;
 
-/**
- * Booking confirmation (sent right after a booking is made)
+/* ───────────────── Who booking emails go to ─────────────────
+ * Always the email on the booking's account, never the free-text customerEmail from the
+ * booking form, so the booking flow cannot be used to email arbitrary addresses.
  */
-// Three versions of the booking email, each with the PDF invoice attached:
-//  'booked'  – right after booking: paid online ("Paid. The keys are yours.") or pay at pickup ("Reserved")
-//  'payment' – a booking that was waiting for payment has just been paid
-const buildBookingConfirmationEmail = ({ booking: rawBooking, car, user, variant = 'booked' }) => {
-  const booking = safeBooking(rawBooking);
-  const carDoc = car || booking.car || {};
-  const paint = paintFor(carDoc.type);
-  const name = booking.customerName || escapeHtml((user && user.name) || 'there'); // customerName is already escaped
+const idOf = (ref) => (ref && typeof ref === 'object' && ref._id ? ref._id : ref);
+
+const resolveAccount = async (booking, user) => {
+  const ownerId = idOf(booking?.user);
+  const isOwner = (u) => u && typeof u === 'object' && u.email && (!ownerId || !idOf(u) || String(idOf(u)) === String(ownerId));
+  if (isOwner(user)) return user;
+  if (booking?.user && typeof booking.user === 'object' && booking.user.email) return booking.user;
+  if (!ownerId) return null;
+  return User.findById(ownerId).select('name email phone').lean();
+};
+
+/** The booking with its account attached, so the invoice's "Billed to" shows the account email. */
+const withAccount = (booking, account) => {
+  if (booking?.user && typeof booking.user === 'object' && booking.user.email) return booking;
+  const obj = booking && typeof booking.toObject === 'function' ? booking.toObject() : { ...booking };
+  return { ...obj, user: account };
+};
+
+// Lets the caller send its HTTP response first: the PDF render is synchronous and would hold it up
+const afterResponse = () => new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * Booking email, with the PDF invoice attached:
+ *  'booked'  – right after booking: reserved, payment pending (or paid, for older flows)
+ *  'payment' – a booking that was waiting for payment has just been paid
+ */
+const buildBookingConfirmationEmail = ({ booking, car, user, variant = 'booked' }) => {
+  const info = extractBookingInfo(booking, car);
+  const carDoc = car || (booking?.car && typeof booking.car === 'object' ? booking.car : {}) || {};
+  const paint = paintFor(info.carType);
+  const name = escapeHtml(info.customerName !== 'Valued Customer' ? info.customerName : (user && user.name) || 'there');
   const carName = carTitle(carDoc);
+  const invoiceNo = escapeHtml(info.invoiceNumber);
+  const days = dayLabel(info.totalDays);
+  const isCash = /^cash$/i.test(String(booking?.paymentMethod || ''));
 
-  const totalDays = Math.max(1, Number(booking.totalDays) || 1);
-  const dailyRate = Number(booking.dailyRateSnapshot || carDoc.dailyRate || 0);
-  const baseRental = totalDays * (dailyRate > 0 ? dailyRate : Math.round(Number(booking.totalAmount || 0) / totalDays));
-  const totalAmount = Number(booking.totalAmount || 0);
-  const gst = Math.round((totalAmount - totalAmount / 1.18) * 100) / 100;
-  const paid = Boolean(booking.paymentCompleted);
+  const fare = fareLines(info).map((line) =>
+    line.kind === 'base'
+      ? row(`${rupees(line.rate)} &times; ${days}`, rupees(line.amount))
+      : row(escapeHtml(line.label), `&minus;${rupees(line.amount)}`, { color: GREEN })
+  );
+  fare.push(row('GST 18% (included)', rupees(info.gstAmount)));
+  fare.push(row('Payment', `${escapeHtml(info.paymentMethod)} &middot; ${escapeHtml(info.payment.label)}`));
 
-  const fare = [
-    row(`${rupees(dailyRate)} &times; ${totalDays} day${totalDays > 1 ? 's' : ''}`, rupees(baseRental)),
-    booking.discountAmount > 0 ? row(`Promo ${booking.discountCode || ''}`, `&minus;${rupees(booking.discountAmount)}`, { color: '#15803D' }) : '',
-    booking.loyaltyPointsUsed > 0
-      ? row(`Loyalty points (${booking.loyaltyPointsUsed})`, `&minus;${rupees(Math.round(booking.loyaltyPointsUsed / 10))}`, { color: '#15803D' })
-      : '',
-    row('GST 18% (included)', rupees(gst)),
-    row('Payment', `${escapeHtml(paymentLabel(rawBooking?.paymentMethod))} &middot; ${paid ? 'Paid' : 'Due at pickup'}`),
-  ];
-
-  const total = `
-    <tr><td style="padding:20px 32px 0 32px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${paint.hex};border-radius:14px;">
-        <tr>
-          <td style="padding:18px 22px;">${label(paid ? 'Total paid' : 'Total due at pickup', paint.on)}</td>
-          <td align="right" style="padding:18px 22px;font-family:${DISPLAY};font-size:28px;font-weight:900;color:${paint.on};">${rupees(totalAmount)}</td>
-        </tr>
-      </table>
-    </td></tr>`;
-
-  const invoiceNo = rawBooking?.invoiceNumber || '';
   const copy =
     variant === 'payment'
       ? {
-          subject: `Payment received: ${rupeesText(totalAmount)} · Invoice ${invoiceNo}`,
+          subject: `Payment received: ${rupeesText(info.paidAmount)} · Invoice ${info.invoiceNumber}`,
           title: 'Payment<br>received.',
-          intro: `Hi <strong>${name}</strong>, we've received <strong>${rupees(totalAmount)}</strong> for your <strong>${carName}</strong>. Your booking is confirmed and the paid invoice is attached.`,
+          intro: `Hi <strong>${name}</strong>, we've received <strong>${rupees(info.paidAmount)}</strong> for your <strong>${carName}</strong>. Your booking is confirmed and the paid invoice is attached.`,
         }
-      : paid
+      : info.paid
         ? {
-            subject: `Booking confirmed and paid: ${carTitleText(carDoc)} · Invoice ${invoiceNo}`,
+            subject: `Booking confirmed and paid: ${carTitleText(carDoc) || 'Rental car'} · Invoice ${info.invoiceNumber}`,
             title: 'Paid. The keys<br>are yours.',
             intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is booked and paid. Your invoice is attached, and here is everything you need for pickup.`,
           }
-        : {
-            subject: `Booking reserved, payment pending: ${carTitleText(carDoc)} · Invoice ${invoiceNo}`,
-            title: 'Reserved. Pay<br>at the hub.',
-            intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is reserved. <strong>${rupees(totalAmount)}</strong> is due when you collect it, or pay online any time from My garage. Your invoice is attached.`,
-          };
+        : isCash
+          ? {
+              subject: `Booking reserved, pay at pickup: ${carTitleText(carDoc) || 'Rental car'} · Invoice ${info.invoiceNumber}`,
+              title: 'Reserved. Pay<br>at the hub.',
+              intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is reserved. <strong>${rupees(info.totalAmount)}</strong> is due when you collect it, or pay online from My garage while the booking is waiting for confirmation. Your invoice is attached.`,
+            }
+          : {
+              subject: `Booking reserved, payment pending: ${carTitleText(carDoc) || 'Rental car'} · Invoice ${info.invoiceNumber}`,
+              title: 'Reserved.<br>Payment next.',
+              intro: `Hi <strong>${name}</strong>, your <strong>${carName}</strong> is reserved. Complete the payment online from My garage to confirm it, or pay <strong>${rupees(info.totalAmount)}</strong> at the hub when you collect it. Your invoice is attached.`,
+            };
 
   return {
     subject: copy.subject.trim(),
     html: layout({
       paint,
-      eyebrow: `Invoice ${booking.invoiceNumber || ''}`,
+      eyebrow: `Invoice ${invoiceNo}`,
       title: copy.title,
-      preheader: `${carName}, ${formatDate(booking.pickupDate)} to ${formatDate(booking.returnDate)}.`,
+      preheader: `${carName}, ${formatDate(info.pickupDate)} to ${formatDate(info.returnDate)}.`,
       intro: copy.intro,
       body:
         section('Your drive', rows([
           row('Car', carName, { strong: true }),
-          row('Pickup hub', booking.pickupLocation || 'Main hub, Ahmedabad'),
-          row('Pickup', formatDate(booking.pickupDate)),
-          row('Return', formatDate(booking.returnDate)),
-          row('Duration', `${totalDays} day${totalDays > 1 ? 's' : ''}`),
+          row('Pickup hub', escapeHtml(info.pickupLocation)),
+          row('Pickup', formatDate(info.pickupDate)),
+          row('Return', formatDate(info.returnDate)),
+          row('Duration', days),
         ])) +
         section('Fare', rows(fare)) +
-        total +
-        `<tr><td style="padding:22px 32px 0 32px;font-family:${BODY};font-size:13px;line-height:1.6;color:${MUTED};">
-          Bring your driving licence and an original government ID to the hub. The PDF invoice is attached to this email, and you can download it again any time from <strong style="color:${INK};">My garage</strong>.
-        </td></tr>`,
+        totalBox(paint, escapeHtml(info.payment.totalLabel), info.payment.amount) +
+        note(`Bring your driving licence and an original government ID to the hub. The PDF invoice is attached to this email, and you can download it again any time from <strong style="color:${INK};">My garage</strong>.`),
     }),
   };
 };
 
-const invoiceAttachment = (booking, car) => ({
-  filename: invoiceFilename(booking),
-  content: buildInvoicePdf(booking, car),
-  contentType: 'application/pdf',
-});
-
 const sendBookingEmail = async ({ booking, car, user, variant }) => {
-  try {
-    const transporter = createTransporter();
-    if (!transporter) return;
-    const recipient = booking.customerEmail || (user && user.email) || (booking.user && booking.user.email);
-    if (!recipient) {
-      console.warn('⚠️ No recipient email found for booking email.');
-      return;
-    }
+  await afterResponse();
+  return deliver(`booking (${variant})`, async () => {
+    const account = await resolveAccount(booking, user);
+    if (!account || !isValidEmail(account.email)) return null;
     const carDoc = car || booking.car;
-    const { subject, html } = buildBookingConfirmationEmail({ booking, car: carDoc, user, variant });
-    const info = await transporter.sendMail({
+    const forInvoice = withAccount(booking, account);
+    const { subject, html } = buildBookingConfirmationEmail({ booking: forInvoice, car: carDoc, user: account, variant });
+    return {
       from: from('Driveaway Rentals'),
-      to: recipient,
+      to: account.email,
       subject,
       html,
-      attachments: [invoiceAttachment(booking, carDoc)],
-    });
-    console.log(`✉️ Booking email (${variant}, ${booking.paymentCompleted ? 'paid' : 'payment pending'}) sent to ${recipient} (Message ID: ${info.messageId})`);
-  } catch (error) {
-    console.error('❌ Error sending booking email:', error.message);
-  }
+      attachments: [{ filename: invoiceFilename(booking), content: buildInvoicePdf(forInvoice, carDoc), contentType: 'application/pdf' }],
+    };
+  });
 };
 
-/** Right after booking: paid online, or reserved with payment pending. Invoice attached. */
+/** Right after booking: reserved with payment pending (or paid). Invoice attached. Sent to the account email. */
 const sendBookingConfirmationEmail = ({ booking, car, user }) => sendBookingEmail({ booking, car, user, variant: 'booked' });
 
-/** A booking that was waiting for payment has been paid. Paid invoice attached. */
+/** A booking that was waiting for payment has been paid. Paid invoice attached. Sent to the account email. */
 const sendPaymentReceivedEmail = ({ booking, car, user }) => sendBookingEmail({ booking, car, user, variant: 'payment' });
 
 /**
- * Booking status update (admin confirms, completes or cancels)
+ * Booking status update (admin confirms, completes or cancels; customer cancels)
  */
 const STATUS_COPY = {
   Confirmed: { title: 'Confirmed.<br>Engine warm.', text: 'Your booking is confirmed. The car will be ready at the hub on your pickup date.' },
   Completed: { title: 'Thanks for<br>the drive.', text: 'Your rental is complete. We hope it was a good one. You can leave a review from My garage.' },
-  Cancelled: { title: 'Booking<br>cancelled.', text: 'Your booking has been cancelled. If you paid online, the refund goes back to your original payment method.' },
+  Cancelled: { title: 'Booking<br>cancelled.', text: 'Your booking has been cancelled.' },
   Pending: { title: 'Booking<br>received.', text: 'We have your booking and will confirm it shortly.' },
 };
 
-const buildBookingStatusUpdateEmail = ({ booking: rawBooking, newStatus }) => {
-  const booking = safeBooking(rawBooking);
-  const carDoc = booking.car || {};
-  const paint = paintFor(carDoc.type);
+const buildBookingStatusUpdateEmail = ({ booking, newStatus, user }) => {
+  const info = extractBookingInfo(booking, null);
+  const carDoc = booking?.car && typeof booking.car === 'object' ? booking.car : {};
+  const paint = paintFor(info.carType);
   const status = escapeHtml(newStatus);
   const copy = STATUS_COPY[newStatus] || { title: `Status:<br>${status}.`, text: `Your booking status is now ${status}.` };
+  const name = escapeHtml(info.customerName !== 'Valued Customer' ? info.customerName : (user && user.name) || 'there');
 
+  // What happens to the money, in the same words as the invoice
+  let after = '';
+  const extra = [];
+  if (newStatus === 'Cancelled') {
+    if (info.refunded) {
+      after = info.paymentMethod === 'Cash'
+        ? ` Your payment of ${rupees(info.paidAmount)} has been marked as refunded.`
+        : ` Your payment of ${rupees(info.paidAmount)} has been refunded to your ${escapeHtml(info.paymentMethod)} account.`;
+      extra.push(row('Refund', `${rupees(info.paidAmount)} &middot; ${escapeHtml(info.payment.label)}`, { strong: true, color: GREEN }));
+    } else if (info.paid) {
+      after = ` The ${rupees(info.paidAmount)} you paid will be refunded to the original payment method.`;
+      extra.push(row('Refund', `${rupees(info.paidAmount)} &middot; due`, { strong: true }));
+    } else {
+      after = ' Nothing was charged.';
+    }
+    if (info.loyaltyPointsUsed > 0) after += ` The ${info.loyaltyPointsUsed.toLocaleString('en-IN')} loyalty points you used are back in your account.`;
+  }
+  if (newStatus === 'Completed' && booking?.pointsAwarded) {
+    const earned = Number(booking.loyaltyPointsEarned) || Math.floor(info.totalAmount / 100);
+    if (earned > 0) extra.push(row('Loyalty points earned', earned.toLocaleString('en-IN'), { strong: true, color: GREEN }));
+  }
+
+  const text = `${copy.text}${after}`;
   return {
-    subject: `Booking ${rawBooking?.invoiceNumber || ''}: ${newStatus}`.replace(/\s+/g, ' '),
+    subject: `Booking ${info.invoiceNumber !== 'N/A' ? info.invoiceNumber : ''}: ${newStatus}`.replace(/\s+/g, ' '),
     html: layout({
       paint,
-      eyebrow: `Invoice ${booking.invoiceNumber || ''}`,
+      eyebrow: `Invoice ${escapeHtml(info.invoiceNumber)}`,
       title: copy.title,
       preheader: copy.text,
-      intro: `Hi <strong>${booking.customerName || 'there'}</strong>, ${copy.text.charAt(0).toLowerCase()}${copy.text.slice(1)}`,
+      intro: `Hi <strong>${name}</strong>, ${text.charAt(0).toLowerCase()}${text.slice(1)}`,
       body: section('Booking', rows([
         row('Car', carTitle(carDoc), { strong: true }),
-        row('Status', status, { strong: true, color: newStatus === 'Cancelled' ? '#B91C1C' : INK }),
-        row('Pickup', formatDate(booking.pickupDate)),
-        row('Return', formatDate(booking.returnDate)),
+        row('Status', status, { strong: true, color: newStatus === 'Cancelled' ? RED : INK }),
+        row('Pickup', formatDate(info.pickupDate)),
+        row('Return', formatDate(info.returnDate)),
+        ...extra,
       ])),
     }),
   };
 };
 
-const sendBookingStatusUpdateEmail = async ({ booking, newStatus }) => {
-  try {
-    const transporter = createTransporter();
-    if (!transporter) return;
-    const recipient = booking.customerEmail || (booking.user && booking.user.email);
-    if (!recipient) return;
-    const { subject, html } = buildBookingStatusUpdateEmail({ booking, newStatus });
-    await transporter.sendMail({ from: from('Driveaway Rentals'), to: recipient, subject, html });
-    console.log(`✉️ Booking status update email sent to ${recipient} (Status: ${newStatus})`);
-  } catch (error) {
-    console.error('❌ Error sending status update email:', error.message);
-  }
-};
+/** Status change email, sent to the booking's account email. */
+const sendBookingStatusUpdateEmail = async ({ booking, newStatus, user }) =>
+  deliver(`booking status (${newStatus})`, async () => {
+    const account = await resolveAccount(booking, user);
+    if (!account || !isValidEmail(account.email)) return null;
+    const { subject, html } = buildBookingStatusUpdateEmail({ booking: withAccount(booking, account), newStatus, user: account });
+    return { from: from('Driveaway Rentals'), to: account.email, subject, html };
+  });
 
 /**
  * Car is available again (customer asked to be notified)
  */
 const buildCarAvailabilityEmail = ({ car }) => {
   const paint = paintFor(car.type);
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
   const carName = carTitle(car);
-  const image = car.images?.main ? escapeHtml(String(car.images.main).replace('/1280px-', '/960px-')) : '';
+  const image = car.images?.main ? String(car.images.main).replace('/1280px-', '/960px-') : '';
 
   return {
-    subject: `${carTitleText(car)} is free again`,
+    subject: `${carTitleText(car) || 'Your car'} is free again`,
     html: layout({
       paint,
       eyebrow: 'Now available',
@@ -407,7 +440,7 @@ const buildCarAvailabilityEmail = ({ car }) => {
       preheader: `${carName} is available to book.`,
       intro: `You asked us to tell you when <strong>${carName}</strong> was free. It is, as of now.`,
       body: `
-        ${image ? `<tr><td style="padding:24px 32px 0 32px;"><img src="${image}" width="536" alt="${carName}" style="display:block;width:100%;height:auto;border-radius:14px;"></td></tr>` : ''}
+        ${image ? `<tr><td style="padding:24px 32px 0 32px;"><img src="${escapeHtml(image)}" width="536" alt="${carName}" style="display:block;width:100%;height:auto;border-radius:14px;"></td></tr>` : ''}
         ${section('The car', rows([
           row('Car', carName, { strong: true }),
           row('Daily rate', rupees(car.dailyRate), { strong: true }),
@@ -415,35 +448,49 @@ const buildCarAvailabilityEmail = ({ car }) => {
           row('Fuel', escapeHtml(car.fuelType || 'Petrol')),
           row('Gearbox', escapeHtml(car.transmission || 'Automatic')),
         ]))}
-        <tr><td style="padding:26px 32px 0 32px;">${button(`${clientUrl}/cars/${car._id}`, 'Book it now', paint)}</td></tr>`,
+        <tr><td style="padding:26px 32px 0 32px;">${button(`${site()}/cars/${car._id}`, 'Book it now', paint)}</td></tr>`,
       footer: 'This was a one-time alert because you asked to be notified about this car.',
     }),
   };
 };
 
-const sendCarAvailabilityEmail = async ({ recipientEmail, car }) => {
-  try {
-    const transporter = createTransporter();
-    if (!transporter) return;
-    if (!recipientEmail || !car) return;
+const sendCarAvailabilityEmail = async ({ recipientEmail, car }) =>
+  deliver('car availability', async () => {
+    if (!car || !isValidEmail(recipientEmail)) return null;
     const { subject, html } = buildCarAvailabilityEmail({ car });
-    const info = await transporter.sendMail({ from: from('Driveaway Fleet Alerts'), to: recipientEmail, subject, html });
-    console.log(`✉️ Car availability email sent to ${recipientEmail} (Message ID: ${info.messageId})`);
-  } catch (error) {
-    console.error(`❌ Error sending car availability email to ${recipientEmail}:`, error.message);
-  }
-};
+    return { from: from('Driveaway Fleet Alerts'), to: recipientEmail, subject, html };
+  });
 
 /**
- * Promo code broadcast (no single car, so the band is the house ink with the full paint strip)
+ * Promo code broadcast (no single car, so the band is the house ink with the full paint strip).
+ * Every copy carries a one-click unsubscribe link; `reason` says why this person got it.
  */
-const buildDiscountBroadcastEmail = ({ recipientName: rawName, discountCode: rawCode, percentageOff, maxDiscount, description: rawDescription }) => {
-  const paint = paintFor(null);
+const BROADCAST_REASON = {
+  subscriber: 'You received this because you signed up for Driveaway offers.',
+  account: 'You received this because you have a Driveaway account.',
+};
+
+const buildDiscountBroadcastEmail = ({
+  recipientName: rawName, discountCode: rawCode, percentageOff, maxDiscount, minAmount, expiresAt, maxUsesPerUser,
+  description: rawDescription, unsubscribeUrl, reason = 'subscriber',
+}) => {
+  const paint = HOUSE_PAINT;
   const recipientName = escapeHtml(rawName);
   const description = escapeHtml(rawDescription);
   const code = escapeHtml(rawCode);
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
   const pct = Number(percentageOff) || 0;
+
+  // The code's rules, so nobody is surprised at checkout
+  const terms = [
+    `${pct}% off${Number(maxDiscount) > 0 ? `, up to ${rupees(maxDiscount)}` : ''}`,
+    Number(minAmount) > 0 ? `on bookings of ${rupees(minAmount)} or more` : '',
+    Number(maxUsesPerUser) === 1 ? 'one use per customer' : Number(maxUsesPerUser) > 1 ? `up to ${Number(maxUsesPerUser)} uses per customer` : '',
+    expiresAt ? `valid until ${formatDate(expiresAt)}` : '',
+  ].filter(Boolean).join(', ');
+
+  const unsubscribe = unsubscribeUrl
+    ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${MUTED};text-decoration:underline;">Unsubscribe</a> with one click.`
+    : '';
 
   return {
     subject: `${pct}% off your next drive with ${rawCode}`,
@@ -459,60 +506,41 @@ const buildDiscountBroadcastEmail = ({ recipientName: rawName, discountCode: raw
             <tr><td align="center" style="padding:22px;">
               ${label('Promo code')}
               <div style="font-family:${DISPLAY};font-size:34px;font-weight:900;letter-spacing:3px;color:${INK};padding:6px 0;">${code}</div>
-              <div style="font-family:${BODY};font-size:14px;color:${MUTED};">${pct}% off${maxDiscount ? `, up to ${rupees(maxDiscount)}` : ''}</div>
+              <div style="font-family:${BODY};font-size:14px;color:${MUTED};">${terms.charAt(0).toUpperCase()}${terms.slice(1)}</div>
             </td></tr>
           </table>
         </td></tr>
         ${description ? `<tr><td style="padding:18px 32px 0 32px;font-family:${BODY};font-size:14px;line-height:1.6;color:${MUTED};">${description}</td></tr>` : ''}
-        <tr><td style="padding:26px 32px 0 32px;">${button(`${clientUrl}/fleet`, 'Pick a car', { hex: INK, on: '#FFFFFF' })}</td></tr>`,
-      footer: `Enter ${code} at checkout. You received this because you signed up for Driveaway offers.`,
+        <tr><td style="padding:26px 32px 0 32px;">${button(`${site()}/fleet`, 'Pick a car', { hex: INK, on: '#FFFFFF' })}</td></tr>`,
+      footer: `Enter ${code} at checkout. ${BROADCAST_REASON[reason] || BROADCAST_REASON.subscriber}${unsubscribe}`,
     }),
   };
 };
 
-const sendDiscountBroadcastEmail = async (opts) => {
-  try {
-    const transporter = createTransporter();
-    if (!transporter) return;
-    if (!opts.recipientEmail || !opts.discountCode) return;
+const sendDiscountBroadcastEmail = async (opts) =>
+  deliver(`offer ${opts?.discountCode || ''}`.trim(), async () => {
+    if (!opts || !isValidEmail(opts.recipientEmail) || !opts.discountCode) return null;
     const { subject, html } = buildDiscountBroadcastEmail(opts);
-    const info = await transporter.sendMail({ from: from('Driveaway Offers'), to: opts.recipientEmail, subject, html });
-    console.log(`✉️ Discount broadcast email sent to ${opts.recipientEmail} with code ${opts.discountCode} (Message ID: ${info.messageId})`);
-  } catch (error) {
-    console.error(`❌ Error sending discount broadcast email to ${opts.recipientEmail}:`, error.message);
-  }
-};
+    return { from: from('Driveaway Offers'), to: opts.recipientEmail, subject, html };
+  });
 
 /**
- * Contact form: auto-reply to the visitor + a copy for the team
+ * Contact form: a copy for the team only. There is no auto-reply to the visitor, so the form
+ * cannot be used to send Driveaway emails to an address someone typed in.
  */
 const buildContactEmails = (raw) => {
-  const paint = paintFor(null);
   const name = escapeHtml(raw.name);
   const email = escapeHtml(raw.email);
   const phone = escapeHtml(raw.phone);
   const subject = escapeHtml(raw.subject);
   const message = escapeHtml(raw.message).replace(/\n/g, '<br>');
-  const quote = `<tr><td style="padding:22px 32px 0 32px;">
-      <div style="border-left:4px solid ${INK};padding:4px 0 4px 16px;font-family:${BODY};font-size:14px;line-height:1.6;color:${MUTED};">${message}</div>
-    </td></tr>`;
+  const oneLine = (v) => String(v || '').replace(/[\r\n]+/g, ' ').trim();
 
   return {
-    reply: {
-      subject: 'We have your message',
-      html: layout({
-        paint,
-        eyebrow: 'Support',
-        title: 'Message<br>received.',
-        preheader: 'Our Ahmedabad team will get back to you shortly.',
-        intro: `Thanks, <strong>${name}</strong>. We got your message about <strong>${subject || 'your enquiry'}</strong> and our Ahmedabad team will reply shortly (7:00 AM to 10:00 PM, every day).`,
-        body: quote,
-      }),
-    },
     team: {
-      subject: `New enquiry from ${raw.name} (${raw.subject || 'General'})`,
+      subject: `New enquiry from ${oneLine(raw.name)} (${oneLine(raw.subject) || 'General'})`,
       html: layout({
-        paint,
+        paint: HOUSE_PAINT,
         eyebrow: 'Contact form',
         title: 'New<br>enquiry.',
         body: section('From', rows([
@@ -520,40 +548,100 @@ const buildContactEmails = (raw) => {
           row('Email', email),
           row('Phone', phone || 'Not given'),
           row('Subject', subject || 'General'),
-        ])) + quote,
-        footer: 'Sent from the contact form on the Driveaway website.',
+        ])) + `<tr><td style="padding:22px 32px 0 32px;">
+            <div style="border-left:4px solid ${INK};padding:4px 0 4px 16px;font-family:${BODY};font-size:14px;line-height:1.6;color:${MUTED};">${message}</div>
+          </td></tr>`,
+        footer: 'Sent from the contact form on the Driveaway website. Reply to this email to answer the visitor.',
       }),
     },
   };
 };
 
-const sendContactMessageEmail = async (raw) => {
-  try {
-    const transporter = createTransporter();
-    if (!transporter) return;
-    const { reply, team } = buildContactEmails(raw);
-    await transporter.sendMail({ from: from('Driveaway Support'), to: raw.email, ...reply });
-    await transporter.sendMail({ from: from('Driveaway Contact Form'), to: teamEmail(), replyTo: raw.email, ...team });
-    console.log(`✉️ Contact auto-reply sent to ${raw.email} and team notified.`);
-  } catch (error) {
-    console.error('❌ Error sending contact message emails:', error.message);
-  }
+const sendContactMessageEmail = async (raw) =>
+  deliver('contact form (team copy)', async () => {
+    const to = teamEmail();
+    if (!to) return null;
+    const { team } = buildContactEmails(raw);
+    return { from: from('Driveaway Contact Form'), to, ...(isValidEmail(raw.email) ? { replyTo: raw.email.trim() } : {}), ...team };
+  });
+
+/**
+ * Password reset link (POST /api/auth/forgot-password)
+ */
+const buildPasswordResetEmail = ({ name: rawName, resetUrl, expiresInMinutes = 30 }) => {
+  const name = escapeHtml(rawName || '');
+  const url = escapeHtml(resetUrl);
+  return {
+    subject: 'Reset your Driveaway password',
+    html: layout({
+      paint: HOUSE_PAINT,
+      eyebrow: 'Account',
+      title: 'Reset your<br>password.',
+      preheader: `This link works for ${expiresInMinutes} minutes.`,
+      intro: `${name ? `Hi <strong>${name}</strong>, w` : 'W'}e got a request to reset the password for your Driveaway account. Choose a new one with the button below. The link works once, for the next ${expiresInMinutes} minutes.`,
+      body: `
+        <tr><td style="padding:26px 32px 0 32px;">${button(resetUrl, 'Choose a new password', { hex: INK, on: '#FFFFFF' })}</td></tr>
+        ${note(`If the button does not work, paste this address into your browser:<br><a href="${url}" style="color:${INK};word-break:break-all;">${url}</a>`)}`,
+      footer: 'Did not ask for this? Ignore this email and your password stays the same.',
+    }),
+  };
 };
+
+/** Resolves to { sent, error? }; never rejects. */
+const sendPasswordResetEmail = async ({ to, name, resetUrl } = {}) =>
+  deliver('password reset', async () => {
+    if (!isValidEmail(to) || typeof resetUrl !== 'string' || !/^https?:\/\/\S+$/i.test(resetUrl)) return null;
+    const { subject, html } = buildPasswordResetEmail({ name, resetUrl });
+    return { from: from('Driveaway Accounts'), to: to.trim(), subject, html };
+  });
+
+/**
+ * Confirm offer emails for an address that unsubscribed earlier (someone asked to subscribe it again)
+ */
+const buildResubscribeEmail = ({ confirmUrl }) => {
+  const url = escapeHtml(confirmUrl);
+  return {
+    subject: 'Confirm Driveaway offer emails',
+    html: layout({
+      paint: HOUSE_PAINT,
+      eyebrow: 'Offers',
+      title: 'Offers<br>again?',
+      preheader: 'Nothing changes until you confirm.',
+      intro: 'Someone, hopefully you, asked for Driveaway offer emails at this address. You unsubscribed earlier, so nothing changes until you confirm with the button below.',
+      body: `
+        <tr><td style="padding:26px 32px 0 32px;">${button(confirmUrl, 'Yes, send me offers', { hex: INK, on: '#FFFFFF' })}</td></tr>
+        ${note(`If the button does not work, paste this address into your browser:<br><a href="${url}" style="color:${INK};word-break:break-all;">${url}</a>`)}`,
+      footer: 'Did not ask for this? Ignore this email and you stay unsubscribed.',
+    }),
+  };
+};
+
+/** Resolves to { sent, error? }; never rejects. */
+const sendResubscribeEmail = async ({ to, confirmUrl } = {}) =>
+  deliver('resubscribe confirmation', async () => {
+    if (!isValidEmail(to) || typeof confirmUrl !== 'string' || !/^https?:\/\/\S+$/i.test(confirmUrl)) return null;
+    const { subject, html } = buildResubscribeEmail({ confirmUrl });
+    return { from: from('Driveaway Offers'), to: to.trim(), subject, html };
+  });
 
 module.exports = {
   createTransporter,
-  sendPaymentReceivedEmail,
   emailStatus,
   sendTestEmail,
   sendBookingConfirmationEmail,
-  sendContactMessageEmail,
+  sendPaymentReceivedEmail,
   sendBookingStatusUpdateEmail,
   sendCarAvailabilityEmail,
   sendDiscountBroadcastEmail,
+  sendContactMessageEmail,
+  sendPasswordResetEmail,
+  sendResubscribeEmail,
   // builders (used to preview the templates without sending)
   buildBookingConfirmationEmail,
   buildBookingStatusUpdateEmail,
   buildCarAvailabilityEmail,
   buildDiscountBroadcastEmail,
   buildContactEmails,
+  buildPasswordResetEmail,
+  buildResubscribeEmail,
 };

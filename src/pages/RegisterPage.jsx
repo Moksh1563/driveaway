@@ -1,17 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight, Check } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
-import AuthShell from '../components/layout/AuthShell';
-
-const RULES = [
-  { test: (p) => p.length >= 8, label: '8 or more characters' },
-  { test: (p) => /[A-Za-z]/.test(p), label: 'A letter' },
-  { test: (p) => /\d/.test(p), label: 'A number' },
-];
+import AuthShell, { PasswordChecklist } from '../components/layout/AuthShell';
+import { isEmail, isIndianMobile, passwordOk } from '../hooks/useFieldErrors';
 
 export default function RegisterPage() {
   const { login } = useAuth();
@@ -25,12 +20,14 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
 
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
-  const passOk = RULES.every((r) => r.test(form.password));
+  const passOk = passwordOk(form.password);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!passOk) return setError('Your password needs 8 or more characters, with a letter and a number.');
+    if (!isEmail(form.email)) return setError('Enter a valid email address, like you@example.com.');
+    if (form.phone.trim() && !isIndianMobile(form.phone)) return setError('Enter a 10-digit Indian mobile number, or leave the phone empty.');
+    if (!passOk) return setError('Your password needs 8 to 128 characters, with a letter and a number.');
     if (form.password !== form.confirmPassword) return setError('The two passwords do not match.');
     if (!agreed) return setError('Please accept the rental terms to continue.');
     setLoading(true);
@@ -38,8 +35,8 @@ export default function RegisterPage() {
       const { data } = await api.post('/auth/register', {
         name: form.name,
         username: form.username,
-        email: form.email,
-        phone: form.phone,
+        email: form.email.trim(),
+        phone: form.phone.trim(),
         password: form.password,
       });
       login(data.token, data.user);
@@ -52,10 +49,10 @@ export default function RegisterPage() {
     }
   };
 
-  const field = (key, label, type, autoComplete, placeholder) => (
+  const field = (key, label, type, autoComplete, placeholder, required = true) => (
     <label className="block">
       <span className="field-label">{label}</span>
-      <input type={type} required value={form[key]} onChange={set(key)} autoComplete={autoComplete} placeholder={placeholder} className="field" />
+      <input type={type} required={required} value={form[key]} onChange={set(key)} autoComplete={autoComplete} placeholder={placeholder} className="field" />
     </label>
   );
 
@@ -68,7 +65,7 @@ export default function RegisterPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {field('email', 'Email', 'email', 'email', 'you@example.com')}
-          {field('phone', 'Phone', 'tel', 'tel', '10-digit mobile')}
+          {field('phone', 'Phone (optional)', 'tel', 'tel', '10-digit mobile', false)}
         </div>
 
         <label className="block">
@@ -80,22 +77,18 @@ export default function RegisterPage() {
             </button>
           </span>
         </label>
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Password requirements">
-          {RULES.map((r) => {
-            const ok = r.test(form.password);
-            return (
-              <li key={r.label} className={`flex items-center gap-1.5 ${ok ? 'text-ok' : 'text-muted'}`}>
-                <Check className={`h-3.5 w-3.5 ${ok ? '' : 'opacity-30'}`} /> {r.label}
-              </li>
-            );
-          })}
-        </ul>
+        <PasswordChecklist password={form.password} />
 
         {field('confirmPassword', 'Confirm password', showPw ? 'text' : 'password', 'new-password')}
 
+        {/* Tapping a link inside the label opens it (in a new tab, so the form is kept) without toggling the box */}
         <label className="flex items-start gap-3 pt-1 text-sm text-muted">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-5 w-5 rounded border-line bg-raised text-ink focus:ring-ink/30" />
-          <span>I accept Driveaway&apos;s rental terms and privacy policy, and confirm I hold a valid driving licence.</span>
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-5 w-5 flex-shrink-0 rounded border-line bg-raised text-ink focus:ring-ink/30" />
+          <span>
+            I accept Driveaway&apos;s{' '}
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-ink underline">rental terms</Link> and{' '}
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-ink underline">privacy policy</Link>, and confirm I hold a valid driving licence.
+          </span>
         </label>
 
         {error && <p role="alert" className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>}

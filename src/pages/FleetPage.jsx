@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Search, MapPin, CalendarDays } from 'lucide-react';
 import api from '../api/axios';
 import CarCard from '../components/cars/CarCard';
@@ -8,6 +8,8 @@ import { PAINTS, PAINT_ORDER, paintFor, paintStyle, plural, rupees } from '../th
 import Reveal from '../components/ui/Reveal';
 import { CarGridSkeleton } from '../components/ui/Skeletons';
 import { sheetMotion, sheetScrimMotion } from '../theme/motion';
+import useFocusTrap from '../hooks/useFocusTrap';
+import useDebounced from '../hooks/useDebounced';
 
 const TYPES = ['All', ...PAINT_ORDER];
 const FUELS = ['All', 'Petrol', 'Diesel', 'Electric', 'Hybrid'];
@@ -18,21 +20,38 @@ const SORTS = [
   { value: 'price_desc', label: 'Price, high to low' },
   { value: 'rating', label: 'Best rated' },
 ];
+const SORT_VALUES = SORTS.map((s) => s.value);
 
-/** Debounce a fast-changing value (typing) so we don't hit the API on every keystroke. */
-function useDebounced(value, delay = 350) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
+// Filters live in the URL (so Back from a car, a bookmark or a shared link restores them).
+// Filter key -> search param name; defaults are left out of the URL.
+const PARAM = { type: 'type', fuelType: 'fuel', transmission: 'gearbox', minPrice: 'min', maxPrice: 'max', search: 'search', sort: 'sort', page: 'page' };
+const DEFAULTS = { type: 'All', fuelType: 'All', transmission: 'All', minPrice: '', maxPrice: '', search: '', sort: 'newest', page: 1 };
+
+/** Read the filters from the URL, ignoring anything unknown or malformed. */
+function readFilters(params) {
+  const pick = (key, allowed) => (allowed.includes(params.get(PARAM[key])) ? params.get(PARAM[key]) : DEFAULTS[key]);
+  const amount = (key) => {
+    const v = (params.get(PARAM[key]) || '').trim();
+    return /^\d+$/.test(v) ? v : '';
+  };
+  const page = parseInt(params.get(PARAM.page), 10);
+  return {
+    type: pick('type', TYPES),
+    fuelType: pick('fuelType', FUELS),
+    transmission: pick('transmission', TRANSMISSIONS),
+    minPrice: amount('minPrice'),
+    maxPrice: amount('maxPrice'),
+    search: (params.get(PARAM.search) || '').trim(),
+    sort: pick('sort', SORT_VALUES),
+    page: page > 0 ? page : 1,
+  };
 }
 
-const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+// Trip dates arrive as YYYY-MM-DD (read as UTC midnight), so format them in UTC to keep the day
+const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 export default function FleetPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Trip details carried over from the home page order slip; booking pre-fills from these
   const trip = {
     location: searchParams.get('location') || '',
@@ -52,31 +71,49 @@ export default function FleetPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  // Text inputs are kept separately and debounced before they reach the API
-  const [searchText, setSearchText] = useState(searchParams.get('search') || '');
-  const [priceInput, setPriceInput] = useState({ min: '', max: '' });
+  const sheetRef = useRef(null);
+
+  const filters = useMemo(() => readFilters(searchParams), [searchParams]);
+
+  /** Write filter changes to the URL. Replace, not push: Back leaves the fleet instead of undoing a filter. */
+  const setParams = useCallback((changes) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [key, value] of Object.entries(changes)) {
+        if (value === undefined || value === null || value === '' || value === DEFAULTS[key]) next.delete(PARAM[key]);
+        else next.set(PARAM[key], String(value));
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  // setSearchParams changes identity with every URL change; effects below must run only when
+  // their own inputs change, so they call the latest one through a ref
+  const setParamsRef = useRef(setParams);
+  useEffect(() => { setParamsRef.current = setParams; }, [setParams]);
+
+  // Text inputs are kept separately and debounced before they reach the URL (and the API)
+  const [searchText, setSearchText] = useState(filters.search);
+  const [priceInput, setPriceInput] = useState({ min: filters.minPrice, max: filters.maxPrice });
   const debouncedSearch = useDebounced(searchText.trim());
   const debouncedPrice = useDebounced(priceInput);
+  // What the text inputs last wrote to the URL, to tell our own writes from outside changes
+  const written = useRef({ search: filters.search, min: filters.minPrice, max: filters.maxPrice });
 
-  const [filters, setFilters] = useState({
-    type: searchParams.get('type') || 'All',
-    fuelType: 'All',
-    transmission: 'All',
-    minPrice: '',
-    maxPrice: '',
-    search: searchParams.get('search') || '',
-    sort: 'newest',
-    page: 1,
-  });
-
-  // Debounced text fields feed into the filters (and reset to page 1)
+  // The URL changed from outside (a link to /fleet, Clear all): bring the text inputs along
   useEffect(() => {
-    setFilters(prev => (
-      prev.minPrice === debouncedPrice.min && prev.maxPrice === debouncedPrice.max && prev.search === debouncedSearch
-        ? prev
-        : { ...prev, minPrice: debouncedPrice.min, maxPrice: debouncedPrice.max, search: debouncedSearch, page: 1 }
-    ));
-  }, [debouncedPrice, debouncedSearch]);
+    const w = written.current;
+    if (filters.search !== w.search) setSearchText(filters.search);
+    if (filters.minPrice !== w.min || filters.maxPrice !== w.max) setPriceInput({ min: filters.minPrice, max: filters.maxPrice });
+    written.current = { search: filters.search, min: filters.minPrice, max: filters.maxPrice };
+  }, [filters.search, filters.minPrice, filters.maxPrice]);
+
+  // Debounced text fields feed into the URL (and reset to page 1)
+  useEffect(() => {
+    const w = written.current;
+    if (debouncedSearch === w.search && debouncedPrice.min === w.min && debouncedPrice.max === w.max) return;
+    written.current = { search: debouncedSearch, min: debouncedPrice.min, max: debouncedPrice.max };
+    setParamsRef.current({ search: debouncedSearch, minPrice: debouncedPrice.min, maxPrice: debouncedPrice.max, page: null });
+  }, [debouncedSearch, debouncedPrice]);
 
   // Fetch cars whenever filters change; abort stale requests so results never arrive out of order
   useEffect(() => {
@@ -94,8 +131,14 @@ export default function FleetPage() {
         if (filters.search) params.search = filters.search;
 
         const { data } = await api.get('/cars', { params, signal: controller.signal });
+        const pages = data.totalPages || 1;
+        // A bookmarked or shared link can point past the last page once the fleet shrinks
+        if (filters.page > pages && (data.totalCars || 0) > 0) {
+          setParamsRef.current({ page: pages });
+          return;
+        }
         setCars(data.cars || []);
-        setTotalPages(data.totalPages || 1);
+        setTotalPages(pages);
         setTotalCars(data.totalCars || 0);
         setLoading(false);
       } catch (err) {
@@ -108,32 +151,33 @@ export default function FleetPage() {
     return () => controller.abort();
   }, [filters, reloadKey]);
 
-  // Synchronize filters when URL search parameters change (e.g. from homepage search or category links)
-  useEffect(() => {
-    const urlType = searchParams.get('type') || 'All';
-    setFilters(prev => {
-      if (prev.type !== urlType) {
-        return { ...prev, type: urlType, page: 1 };
-      }
-      return prev;
-    });
-  }, [searchParams]);
+  const updateFilter = (key, value) => setParams({ [key]: value, page: null });
 
-
-  const updateFilter = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
-  };
-
-  const clearFilters = () => {
-    setSearchText('');
-    setPriceInput({ min: '', max: '' });
-    setFilters({ type: 'All', fuelType: 'All', transmission: 'All', minPrice: '', maxPrice: '', search: '', sort: 'newest', page: 1 });
-  };
+  // Clears the filters and sort; the trip details (hub, dates) carried from the home page stay
+  const clearFilters = () => setParams({ type: null, fuelType: null, transmission: null, minPrice: null, maxPrice: null, search: null, sort: null, page: null });
 
   const goToPage = (page) => {
-    setFilters(p => ({ ...p, page }));
+    setParams({ page });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Mobile filter sheet: a real dialog (focus moves in and stays, Escape closes, focus returns)
+  const closeFilters = useCallback(() => setFiltersOpen(false), []);
+  useFocusTrap(sheetRef, filtersOpen, { onEscape: closeFilters });
+  useEffect(() => {
+    if (!filtersOpen) return undefined;
+    // The sheet only exists below the md breakpoint: close it if the window grows past it
+    const wide = window.matchMedia('(min-width: 768px)');
+    if (wide.matches) { setFiltersOpen(false); return undefined; }
+    const onChange = (e) => { if (e.matches) setFiltersOpen(false); };
+    wide.addEventListener?.('change', onChange);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      wide.removeEventListener?.('change', onChange);
+      document.body.style.overflow = prev;
+    };
+  }, [filtersOpen]);
 
   const activeFilterCount =
     (filters.type !== 'All') + (filters.fuelType !== 'All') + (filters.transmission !== 'All') +
@@ -264,24 +308,28 @@ export default function FleetPage() {
 
           <AnimatePresence>
             {filtersOpen && (
-              <motion.div {...sheetScrimMotion} className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Filters">
-                <div className="absolute inset-0 bg-[#0C0C0D]/60" onClick={() => setFiltersOpen(false)} />
-                <motion.div
+              <m.div {...sheetScrimMotion} className="fixed inset-0 z-[60] md:hidden">
+                <div className="absolute inset-0 bg-[#0C0C0D]/60" onClick={closeFilters} aria-hidden="true" />
+                <m.div
+                  ref={sheetRef}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="filters-sheet-title"
                   {...sheetMotion}
-                  className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-[24px] border-t border-line bg-surface p-6"
+                  className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-[24px] border-t border-line bg-surface p-6 focus:outline-none"
                 >
                   <div className="mb-6 flex items-center justify-between">
-                    <h2 className="font-wide font-black uppercase tracking-tight text-xl">Filters</h2>
-                    <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Close filters" className="grid h-10 w-10 place-items-center rounded-full border border-line">
+                    <h2 id="filters-sheet-title" className="font-wide font-black uppercase tracking-tight text-xl">Filters</h2>
+                    <button type="button" onClick={closeFilters} aria-label="Close filters" className="grid h-10 w-10 place-items-center rounded-full border border-line">
                       <X className="h-5 w-5" />
                     </button>
                   </div>
                   {renderFilterPanel()}
-                  <button type="button" onClick={() => setFiltersOpen(false)} className="btn-ink mt-6 w-full !py-4">
+                  <button type="button" onClick={closeFilters} className="btn-ink mt-6 w-full !py-4">
                     Show {totalCars} {totalCars === 1 ? 'car' : 'cars'}
                   </button>
-                </motion.div>
-              </motion.div>
+                </m.div>
+              </m.div>
             )}
           </AnimatePresence>
 

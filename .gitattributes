@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# index.html carries an inline script whose sha256 is pinned in vercel.json (CSP script-src).
+# Keep it LF everywhere so the hash computed on any machine matches what Vercel builds.
+index.html text eol=lf

@@ -3,8 +3,12 @@ const Car = require('../models/Car');
 const Review = require('../models/Review');
 const Booking = require('../models/Booking');
 const CarAlert = require('../models/CarAlert');
+const Upload = require('../models/Upload');
 const { triggerCarAvailabilityAlerts } = require('../utils/carAlertService');
 const { escapeRegex, isValidEmail } = require('../middleware/securityMiddleware');
+const {
+  ACTIVE_BOOKING_STATUSES, busyNowMap, withAvailability, bookedRangesFor, decorateCar,
+} = require('../utils/carAvailability');
 
 // Fields an admin may set on a car (prevents overwriting ratings/review counts via the API)
 const CAR_FIELDS = ['name', 'company', 'type', 'yearModel', 'dailyRate', 'status', 'fuelType', 'transmission',
@@ -13,7 +17,69 @@ const pickCarFields = (body) => CAR_FIELDS.reduce((acc, k) => {
   if (body[k] !== undefined) acc[k] = body[k];
   return acc;
 }, {});
-const CAR_STATUSES = ['Available', 'Rented', 'Maintenance'];
+// What an admin can set. Whether a car is out on a trip comes from its bookings.
+const CAR_STATUSES = ['Available', 'Maintenance'];
+const EFFECTIVE_STATUSES = ['Available', 'Rented', 'Maintenance'];
+
+// Photo and credit links must be web addresses or site paths (/uploads/..., /api/uploads/...),
+// never javascript:, data: or other schemes that would run when rendered as a link or image
+const isSafeLink = (v) => v === undefined || v === null || v === '' ||
+  (typeof v === 'string' && (/^https?:\/\//i.test(v.trim()) || /^\/(?!\/)/.test(v.trim())));
+
+const linkInputError = (fields) => {
+  if (fields.images !== undefined) {
+    if (!fields.images || typeof fields.images !== 'object' || Array.isArray(fields.images)) return 'Images must be an object of photo links';
+    if (!Object.values(fields.images).every(isSafeLink)) return 'Photo links must start with https:// (or be an uploaded photo)';
+  }
+  if (fields.imageCredits !== undefined) {
+    if (!Array.isArray(fields.imageCredits)) return 'Photo credits must be a list';
+    const bad = fields.imageCredits.some((c) => !c || typeof c !== 'object' || !isSafeLink(c.url) || !isSafeLink(c.source));
+    if (bad) return 'Photo credit links must start with https://';
+  }
+  return null;
+};
+
+/** Check admin input before it reaches the database. Returns an error message or null. */
+const carInputError = (fields, { creating }) => {
+  const linkError = linkInputError(fields);
+  if (linkError) return linkError;
+  if (creating || 'dailyRate' in fields) {
+    const rate = Number(fields.dailyRate);
+    if (fields.dailyRate === null || fields.dailyRate === '' || !Number.isFinite(rate) || rate < 1) {
+      return 'Daily rate must be a number of at least ₹1';
+    }
+  }
+  if ('status' in fields && !CAR_STATUSES.includes(fields.status)) {
+    return fields.status === 'Rented'
+      ? 'Rented is worked out from bookings. Set the car to Available or Maintenance.'
+      : `Status must be one of: ${CAR_STATUSES.join(', ')}`;
+  }
+  return null;
+};
+
+// Photos uploaded to this API are stored in MongoDB and linked as .../api/uploads/<id>
+const IMAGE_KEYS = ['main', 'img1', 'img2', 'img3', 'img4'];
+const UPLOAD_ID_RE = /\/api\/uploads\/([a-f0-9]{24})$/i;
+const uploadIdsIn = (images) => Object.values(images || {})
+  .map((url) => (typeof url === 'string' ? UPLOAD_ID_RE.exec(url.trim()) : null))
+  .filter(Boolean)
+  .map((m) => m[1].toLowerCase());
+
+/** Delete uploaded photos that no car shows any more, so they don't fill the free 512 MB database. */
+const removeUnusedUploads = async (ids) => {
+  for (const id of new Set(ids)) {
+    const link = new RegExp(`/api/uploads/${id}$`, 'i');
+    const inUse = await Car.exists({ $or: IMAGE_KEYS.map((k) => ({ [`images.${k}`]: link })) });
+    if (!inUse) await Upload.deleteOne({ _id: id });
+  }
+};
+
+// Car data changes when admins edit it and when customers book, so browsers must check back each time
+// (the ETag makes that a cheap 304 when nothing changed)
+const revalidate = (res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.vary('Authorization');
+};
 
 // @desc   Get all cars with filters/pagination
 // @route  GET /api/cars
@@ -27,7 +93,16 @@ exports.getCars = async (req, res) => {
     if (type) query.type = type;
     if (fuelType) query.fuelType = fuelType;
     if (transmission) query.transmission = transmission;
-    if (status) query.status = status;
+    // status filters on the effective status (Maintenance / out on a booking today / Available)
+    if (status && EFFECTIVE_STATUSES.includes(status)) {
+      if (status === 'Maintenance') {
+        query.status = 'Maintenance';
+      } else {
+        const busyIds = [...(await busyNowMap()).keys()];
+        query.status = { $ne: 'Maintenance' };
+        query._id = status === 'Rented' ? { $in: busyIds } : { $nin: busyIds };
+      }
+    }
     if (minPrice || maxPrice) {
       query.dailyRate = {};
       if (minPrice && !isNaN(minPrice)) query.dailyRate.$gte = Number(minPrice);
@@ -55,10 +130,9 @@ exports.getCars = async (req, res) => {
       Car.countDocuments(query),
     ]);
 
-    // Public catalogue — let browsers/CDNs cache briefly
-    res.set('Cache-Control', 'public, max-age=30');
+    revalidate(res);
     res.json({
-      cars,
+      cars: await withAvailability(cars),
       totalPages: Math.ceil(totalCars / limit),
       currentPage: page,
       totalCars,
@@ -68,16 +142,18 @@ exports.getCars = async (req, res) => {
   }
 };
 
-// @desc   Get single car with reviews
+// @desc   Get single car with reviews and the dates it is already booked
 // @route  GET /api/cars/:id
 exports.getCarById = async (req, res) => {
   try {
     const [car, reviews] = await Promise.all([
       Car.findById(req.params.id).lean(),
-      Review.find({ car: req.params.id }).populate('user', 'name username').sort({ createdAt: -1 }).limit(50).lean(),
+      Review.find({ car: req.params.id }).populate('user', 'name').sort({ createdAt: -1 }).limit(50).lean(),
     ]);
     if (!car) return res.status(404).json({ message: 'Car not found' });
-    res.json({ car, reviews });
+    const [busy, bookedRanges] = await Promise.all([busyNowMap([car._id]), bookedRangesFor(car._id)]);
+    revalidate(res);
+    res.json({ car: { ...decorateCar(car, busy), bookedRanges }, reviews });
   } catch (error) {
     handleError(res, error);
   }
@@ -87,10 +163,24 @@ exports.getCarById = async (req, res) => {
 // @route  POST /api/cars
 exports.createCar = async (req, res) => {
   try {
-    const car = await Car.create(pickCarFields(req.body));
-    res.status(201).json(car);
+    const fields = pickCarFields(req.body);
+    const invalid = carInputError(fields, { creating: true });
+    if (invalid) return res.status(400).json({ message: invalid });
+    const car = await Car.create(fields);
+    const [decorated] = await withAvailability([car.toObject()]);
+    res.status(201).json(decorated);
   } catch (error) {
     handleError(res, error);
+  }
+};
+
+/**
+ * After an admin change: tell waiting customers if the car just came out of maintenance
+ * (or an older stored 'Rented' was cleared). The alert service sends only if no booking covers today.
+ */
+const alertIfReleased = (before, after) => {
+  if (before && before.status !== 'Available' && after.status === 'Available') {
+    triggerCarAvailabilityAlerts(after._id).catch(err => console.error(err));
   }
 };
 
@@ -98,15 +188,23 @@ exports.createCar = async (req, res) => {
 // @route  PUT /api/cars/:id
 exports.updateCar = async (req, res) => {
   try {
-    const car = await Car.findByIdAndUpdate(req.params.id, pickCarFields(req.body), { new: true, runValidators: true });
+    const fields = pickCarFields(req.body);
+    const invalid = carInputError(fields, { creating: false });
+    if (invalid) return res.status(400).json({ message: invalid });
+    const before = await Car.findById(req.params.id).select('status images').lean();
+    if (!before) return res.status(404).json({ message: 'Car not found' });
+    const car = await Car.findByIdAndUpdate(req.params.id, fields, { new: true, runValidators: true }).lean();
     if (!car) return res.status(404).json({ message: 'Car not found' });
 
-    // If car was set to Available, trigger availability alerts
-    if (req.body.status === 'Available') {
-      triggerCarAvailabilityAlerts(car._id).catch(err => console.error(err));
+    alertIfReleased(before, car);
+    if (fields.images !== undefined) {
+      const kept = new Set(uploadIdsIn(car.images));
+      removeUnusedUploads(uploadIdsIn(before.images).filter((id) => !kept.has(id)))
+        .catch((err) => console.error('Could not remove replaced photos:', err.message));
     }
 
-    res.json(car);
+    const [decorated] = await withAvailability([car]);
+    res.json(decorated);
   } catch (error) {
     handleError(res, error);
   }
@@ -118,37 +216,39 @@ exports.deleteCar = async (req, res) => {
   try {
     const activeBookings = await Booking.findOne({
       car: req.params.id,
-      status: { $in: ['Pending', 'Confirmed'] },
+      status: { $in: ACTIVE_BOOKING_STATUSES },
     });
     if (activeBookings) return res.status(400).json({ message: 'Cannot delete car with active bookings' });
     const deleted = await Car.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Car not found' });
+    await CarAlert.deleteMany({ car: deleted._id });
+    removeUnusedUploads(uploadIdsIn(deleted.images)).catch((err) => console.error('Could not remove the deleted car photos:', err.message));
     res.json({ message: 'Car removed successfully' });
   } catch (error) {
     handleError(res, error);
   }
 };
 
-// @desc   Change car status (Admin)
+// @desc   Change car status (Admin): Available or Maintenance
 // @route  PATCH /api/cars/:id/status
 exports.changeCarStatus = async (req, res) => {
   try {
-    if (!CAR_STATUSES.includes(req.body.status)) {
-      return res.status(400).json({ message: `Status must be one of: ${CAR_STATUSES.join(', ')}` });
-    }
+    const invalid = carInputError({ status: req.body.status }, { creating: false });
+    if (invalid) return res.status(400).json({ message: invalid });
+    const before = await Car.findById(req.params.id).select('status').lean();
+    if (!before) return res.status(404).json({ message: 'Car not found' });
     const car = await Car.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status },
       { new: true }
-    );
+    ).lean();
     if (!car) return res.status(404).json({ message: 'Car not found' });
 
-    // If car changed to Available, notify subscribed users
-    if (req.body.status === 'Available') {
-      triggerCarAvailabilityAlerts(car._id).catch(err => console.error(err));
-    }
+    // If the car came out of maintenance, notify subscribed users
+    alertIfReleased(before, car);
 
-    res.json(car);
+    const [decorated] = await withAvailability([car]);
+    res.json(decorated);
   } catch (error) {
     handleError(res, error);
   }
@@ -163,11 +263,13 @@ exports.subscribeCarAlert = async (req, res) => {
       return res.status(400).json({ message: 'A valid email address is required' });
     }
 
-    const car = await Car.findById(req.params.id);
-    if (!car) {
+    const found = await Car.findById(req.params.id).lean();
+    if (!found) {
       return res.status(404).json({ message: 'Car not found' });
     }
 
+    // Offered only while the car is in maintenance or out on a booking today
+    const [car] = await withAvailability([found]);
     if (car.status === 'Available') {
       return res.status(400).json({ message: 'This car is already available for booking!' });
     }
@@ -200,4 +302,3 @@ exports.subscribeCarAlert = async (req, res) => {
     handleError(res, error);
   }
 };
-

@@ -52,27 +52,38 @@ export default function LoginPage() {
             placeholder="you@example.com"
           />
         </label>
-        <label className="block">
-          <span className="field-label">Password</span>
-          <span className="relative block">
-            <input
-              type={showPw ? 'text' : 'password'}
-              required
-              autoComplete="current-password"
-              value={form.password}
-              onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-              className="field !pr-12"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw((s) => !s)}
-              aria-label={showPw ? 'Hide password' : 'Show password'}
-              className="absolute right-1.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full text-muted hover:text-ink"
+        <div>
+          <label className="block">
+            <span className="field-label">Password</span>
+            <span className="relative block">
+              <input
+                type={showPw ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                value={form.password}
+                onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                className="field !pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((s) => !s)}
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+                className="absolute right-1.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full text-muted hover:text-ink"
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </span>
+          </label>
+          <p className="mt-2 text-right text-sm">
+            <Link
+              to="/forgot-password"
+              state={form.email.includes('@') ? { email: form.email.trim() } : undefined}
+              className="font-semibold text-muted underline hover:text-ink"
             >
-              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </span>
-        </label>
+              Forgot password?
+            </Link>
+          </p>
+        </div>
 
         {error && <p role="alert" className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>}
 

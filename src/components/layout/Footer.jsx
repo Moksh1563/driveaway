@@ -103,7 +103,11 @@ export default function Footer() {
         <div className="mt-12 flex flex-col-reverse gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Logo sub={null} />
-            <p className="mt-3 text-xs text-muted">© {year} Driveaway Luxury Rentals, Ahmedabad, Gujarat.</p>
+            <p className="mt-3 text-xs text-muted">© {year} Driveaway Luxury Rentals, Ahmedabad, Gujarat. A demonstration project.</p>
+            <ul className="mt-2 flex gap-4 text-xs">
+              <li><Link to="/terms" className="hover:underline">Rental terms</Link></li>
+              <li><Link to="/privacy" className="hover:underline">Privacy</Link></li>
+            </ul>
           </div>
           <div className="flex gap-2">
             {[

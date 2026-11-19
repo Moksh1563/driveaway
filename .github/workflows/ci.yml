@@ -1,0 +1,48 @@
+# Lint, build and API tests on every push and pull request.
+# Render deploys a commit only after these checks pass (render.yaml autoDeployTrigger: checksPass);
+# Vercel deploys every push, so a red web job here means the live website may be broken.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  web:
+    name: Website (lint + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24   # the Node major Render runs (render.yaml NODE_VERSION)
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  api:
+    name: API tests
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    defaults:
+      run:
+        working-directory: server
+    env:
+      # The suite makes its own fixtures in this database and removes them afterwards (no seed needed)
+      TEST_MONGO_URI: mongodb://127.0.0.1:27017/driveaway_test
+      JWT_SECRET: ci-only-test-secret-0123456789abcdef
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm test

@@ -5,6 +5,9 @@
  * Stores newsletter and discount alert subscriptions. When the admin launches
  * a promo code or broadcasts a special offer, all active subscribers receive
  * promotional email notifications.
+ * The unsubscribe link in every offer email sets isActive to false (creating an
+ * inactive record if there was none). An inactive record is an opt-out: it also
+ * stops offer emails to a registered account with the same email.
  */
 
 const mongoose = require('mongoose');
@@ -24,7 +27,8 @@ const discountSubscriberSchema = new mongoose.Schema({
     ref: 'User',
     default: null,
   },
-  // Subscription status (allows opt-out / re-subscription)
+  // Subscription status: false = unsubscribed (opt-out). Only the signed-in owner of the address,
+  // or the confirmation link emailed to it, sets it back to true
   isActive: {
     type: Boolean,
     default: true,

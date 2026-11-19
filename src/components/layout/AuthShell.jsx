@@ -1,5 +1,7 @@
 import React from 'react';
+import { Check } from 'lucide-react';
 import { PAINTS, PAINT_ORDER, paintStyle } from '../../theme/paints';
+import { PASSWORD_RULES } from '../../hooks/useFieldErrors';
 
 /**
  * Split layout for sign-in and sign-up: a lacquered paint panel beside the form.
@@ -32,5 +34,21 @@ export default function AuthShell({ paint = 'Supercar', title, lead, children })
         </div>
       </section>
     </div>
+  );
+}
+
+/** The live password checklist shared by sign-up and password reset. */
+export function PasswordChecklist({ password }) {
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Password requirements">
+      {PASSWORD_RULES.map((r) => {
+        const ok = r.test(password || '');
+        return (
+          <li key={r.label} className={`flex items-center gap-1.5 ${ok ? 'text-ok' : 'text-muted'}`}>
+            <Check className={`h-3.5 w-3.5 ${ok ? '' : 'opacity-30'}`} /> {r.label}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

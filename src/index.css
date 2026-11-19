@@ -13,6 +13,11 @@
     --line: 214 210 203;
     --paint: 208 2 27;
     --on-paint: 255 255 255;
+    /* Status colours, used as text: at least 4.5:1 on ground, surface, raised, the ink/6% badge
+       wash and their own 10% tint (ok 4.82, warn 4.60, danger 4.71 at worst) */
+    --ok: 21 106 57;      /* #156A39 */
+    --warn: 132 86 16;    /* #845610 */
+    --danger: 180 32 32;  /* #B42020 */
     color-scheme: light;
 
     /* Motion tokens (mirrored in src/theme/motion.js): appear, leave, move on screen */
@@ -28,6 +33,10 @@
     --ink: 242 240 236;
     --muted: 162 158 152;
     --line: 46 46 50;
+    /* Lighter on clear-coat for the same 4.5:1 (ok 5.05, warn 5.56, danger 5.04 at worst) */
+    --ok: 59 176 109;     /* #3BB06D */
+    --warn: 217 150 58;   /* #D9963A */
+    --danger: 244 116 116; /* #F47474 */
     color-scheme: dark;
   }
 
@@ -50,6 +59,12 @@
 
   :focus-visible { outline: 2px solid rgb(var(--ink)); outline-offset: 3px; border-radius: 6px; }
   .on-paint :focus-visible { outline-color: rgb(var(--on-paint)); }
+
+  /* @tailwindcss/forms fills a ticked box with currentColor (text-ink) and draws a white tick, which vanishes
+     on the dark theme's light ink. Draw the tick in the dark ground colour there instead. */
+  :root.dark [type='checkbox']:checked {
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='%230C0C0D' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+  }
 
   ::selection { background: rgb(var(--paint)); color: rgb(var(--on-paint)); }
   input, textarea, select { caret-color: rgb(var(--paint)); }

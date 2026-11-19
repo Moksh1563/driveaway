@@ -3,44 +3,60 @@
  * NOTIFY AVAILABILITY MODAL COMPONENT
  * ============================================================================
  * Provides an interactive modal allowing customers to register their email
- * for an automated notification when a vehicle currently marked as 'Rented'
- * or 'Maintenance' becomes available for booking.
+ * for an automated notification when a vehicle that is booked right now or
+ * in maintenance becomes available for booking. Built on the shared Modal,
+ * so focus, Escape, scroll lock and the exit animation behave like every
+ * other dialog.
  */
 
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bell, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useId, useRef } from 'react';
+import { Bell, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
-import { modalMotion } from '../../theme/motion';
+import Modal from '../ui/Modal';
+import { carTitle } from '../../theme/paints';
+import { sizedImage, handleImageError } from '../../utils/image';
+
+const shortDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+/** Plain-words status for the preview card ("Booked until 12 Dec", "In maintenance"). */
+const statusText = (car) => {
+  if (car.status === 'Maintenance') return 'In maintenance';
+  if (car.status === 'Rented') return car.nextFreeDate ? `Booked until ${shortDate(car.nextFreeDate)}` : 'Booked right now';
+  return car.status;
+};
 
 export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
   const { user } = useAuth();
   const [email, setEmail] = useState(user?.email || '');
-
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const emailRef = useRef(null);
+  const doneRef = useRef(null);
+  const emailId = useId();
+  const hintId = useId();
+  const errorId = useId();
 
-  // Handle ESC key to close modal
+  // Start fresh each time it opens, and pre-fill the account email (the user may have
+  // signed in after this component first mounted)
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+    setSuccessMsg('');
+    setErrorMsg('');
+    setEmail((current) => current || user?.email || '');
+  }, [isOpen, user?.email]);
 
-  if (!isOpen || !car) return null;
+  // The form (and the focused button) is replaced by the confirmation: keep focus in the dialog
+  useEffect(() => {
+    if (successMsg) doneRef.current?.focus();
+  }, [successMsg]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !email.includes('@')) {
       setErrorMsg('Please enter a valid email address.');
+      emailRef.current?.focus();
       return;
     }
 
@@ -48,7 +64,7 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
     setErrorMsg('');
     try {
       const { data } = await api.post(`/cars/${car._id}/notify`, { email });
-      setSuccessMsg(data.message || `You're all set! We'll email ${email} the moment this car is back in fleet.`);
+      setSuccessMsg(data.message || `You're all set. We'll email ${email} as soon as this car can be booked.`);
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to register notification alert. Please try again.');
     } finally {
@@ -56,149 +72,104 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
     }
   };
 
-  const handleClose = () => {
-    setSuccessMsg('');
-    setErrorMsg('');
-    onClose();
-  };
+  const name = car ? carTitle(car) || 'This car' : '';
 
-  const carName = car.name?.toLowerCase().startsWith((car.company || '').toLowerCase()) ? car.name : `${car.company || ''} ${car.name || 'Vehicle'}`.trim();
-  const carImage = car.images?.main || (car.images && car.images[0]) || 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800';
-
-  const modalContent = (
-    <AnimatePresence>
-      <div
-        className="fixed inset-0 z-[9999] overflow-y-auto bg-black/70 p-3 sm:p-6 cursor-pointer"
-        onClick={handleClose}
-      >
-        <div className="flex min-h-full items-center justify-center py-4">
-          <motion.div
-            {...modalMotion}
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md my-auto bg-surface border border-line rounded-[24px] p-5 sm:p-6 shadow-2xl text-ink cursor-default max-h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden"
-          >
-            {/* Close button */}
-            <button
-              type="button"
-              onClick={handleClose}
-              aria-label="Close notify modal"
-              className="absolute top-3.5 right-3.5 z-30 p-2 text-muted hover:text-ink dark:text-muted rounded-full bg-ink/5 hover:bg-ink/10 transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-          {successMsg ? (
-            <div className="text-center py-6 space-y-4">
-              <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-              <h3 className="text-2xl font-black text-ink">Alert Set!</h3>
-              <p className="text-sm text-muted leading-relaxed max-w-sm mx-auto">
-                {successMsg}
-              </p>
-              <div className="pt-2">
-                <button
-                  onClick={handleClose}
-                  className="w-full bg-ink hover:bg-ink/85 text-ground font-extrabold py-3 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-ink/15 text-ink rounded-chip flex items-center justify-center flex-shrink-0">
-                  <Bell className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black">Notify When Available</h3>
-                  <p className="text-xs text-muted">Get an instant email alert when back in fleet</p>
-                </div>
-              </div>
-
-              {/* Car Card Preview */}
-              <div className="flex items-center gap-3 p-3 bg-raised border border-line rounded-chip">
-                <img
-                  src={carImage}
-                  alt={carName}
-                  className="w-16 h-16 object-cover rounded-xl bg-ink/10 flex-shrink-0"
-                />
-                <div className="min-w-0 flex-1">
-                  <h4 className="font-bold text-sm text-ink truncate">{carName}</h4>
-                  <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
-                    <span className="text-ink font-extrabold">₹{car.dailyRate?.toLocaleString('en-IN')}/day</span>
-                    <span>•</span>
-                    <span className="capitalize">{car.transmission}</span>
-                  </div>
-                  <div className="mt-1 inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-ink/10 text-ink dark:text-ink">
-                    Status: {car.status}
-                  </div>
-                </div>
-              </div>
-
-              {errorMsg && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs rounded-xl">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-muted mb-1.5 uppercase tracking-wider">
-                    Your Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. yourname@gmail.com"
-                    className="w-full bg-raised border border-line rounded-xl px-4 py-3 text-sm text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ink/30 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                  />
-                  <p className="text-[11px] text-muted mt-1">
-                    We will send a one-time email with a direct booking link as soon as this car is available.
-                  </p>
-                </div>
-
-                <div className="pt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="flex-1 py-3 bg-ink/5 hover:bg-ink/10 text-muted font-bold text-sm rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-ink hover:bg-ink/85 disabled:opacity-50 text-ground font-extrabold text-sm rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] shadow-lg "
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Setting Alert...
-                      </>
-                    ) : (
-                      <>
-                        <Bell className="w-4 h-4" />
-                        Notify Me
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-        </motion.div>
+  return (
+    <Modal
+      isOpen={isOpen && Boolean(car)}
+      onClose={onClose}
+      title={successMsg ? 'Alert set' : 'Notify me when free'}
+      initialFocusRef={successMsg ? undefined : emailRef}
+    >
+      {car && (successMsg ? (
+        <div className="text-center py-2 space-y-4" role="status">
+          <div className="w-16 h-16 bg-ok/10 text-ok rounded-full flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-9 h-9" aria-hidden="true" />
+          </div>
+          <p className="text-sm text-muted leading-relaxed max-w-sm mx-auto">{successMsg}</p>
+          <button ref={doneRef} type="button" onClick={onClose} className="btn-ink w-full">
+            Done
+          </button>
         </div>
-      </div>
-    </AnimatePresence>
-  );
+      ) : (
+        <div className="space-y-5">
+          <p className="flex items-start gap-3 text-sm text-muted">
+            <Bell className="mt-0.5 h-4 w-4 flex-shrink-0 text-ink" aria-hidden="true" />
+            We will send one email with a booking link as soon as this car can be booked.
+          </p>
 
-  if (typeof document === 'undefined') return null;
-  return createPortal(modalContent, document.body);
+          {/* Car preview */}
+          <div className="flex items-center gap-3 p-3 bg-raised border border-line rounded-chip">
+            <img
+              src={sizedImage(car.images?.main, 250)}
+              alt=""
+              width="64"
+              height="64"
+              onError={(e) => handleImageError(e, 250)}
+              className="w-16 h-16 object-cover rounded-xl bg-ink/10 flex-shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-sm text-ink truncate">{name}</p>
+              <p className="flex items-center gap-2 text-xs text-muted mt-0.5">
+                <span className="text-ink font-extrabold">₹{car.dailyRate?.toLocaleString('en-IN')}/day</span>
+                <span aria-hidden="true">·</span>
+                <span className="capitalize">{car.transmission}</span>
+              </p>
+              <p className="mt-1.5 inline-flex items-center rounded-full bg-ink/[0.06] px-2.5 py-0.5 code-label text-[11px] text-muted">
+                {statusText(car)}
+              </p>
+            </div>
+          </div>
+
+          {errorMsg && (
+            <p id={errorId} role="alert" className="flex items-center gap-2 p-3 bg-danger/10 text-danger text-sm rounded-xl">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+              <span>{errorMsg}</span>
+            </p>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <div>
+              <label htmlFor={emailId} className="field-label">Your email address</label>
+              <input
+                ref={emailRef}
+                id={emailId}
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                aria-describedby={errorMsg ? `${hintId} ${errorId}` : hintId}
+                aria-invalid={errorMsg ? true : undefined}
+                className="field"
+              />
+              <p id={hintId} className="text-xs text-muted mt-1.5">
+                We only use it for this alert.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className="btn-line flex-1">
+                Cancel
+              </button>
+              <button type="submit" disabled={loading} className="btn-ink flex-1">
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    Setting alert…
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-4 h-4" aria-hidden="true" />
+                    Notify me
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      ))}
+    </Modal>
+  );
 }
