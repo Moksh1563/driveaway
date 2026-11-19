@@ -3,11 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { m, AnimatePresence } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Search, MapPin, CalendarDays } from 'lucide-react';
 import api from '../api/axios';
-import CarCard from '../components/cars/CarCard';
+import FleetGrid from '../components/cars/FleetGrid';
 import { PAINTS, PAINT_ORDER, paintFor, paintStyle, plural, rupees } from '../theme/paints';
-import Reveal from '../components/ui/Reveal';
+import CountUp from '../components/ui/CountUp';
 import { CarGridSkeleton } from '../components/ui/Skeletons';
-import { sheetMotion, sheetScrimMotion } from '../theme/motion';
+import { LAYOUT, sheetMotion, sheetScrimMotion, viewSwap } from '../theme/motion';
 import useFocusTrap from '../hooks/useFocusTrap';
 import useDebounced from '../hooks/useDebounced';
 
@@ -188,8 +188,11 @@ export default function FleetPage() {
   const rates = cars.map((c) => c.dailyRate);
   const span = rates.length ? [Math.min(...rates), Math.max(...rates)] : null;
 
+  // Pills answer a press by giving slightly under the finger (the round pager buttons a touch more)
+  const press = 'transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98]';
+  const iconPress = 'transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.96]';
   const pill = (active) =>
-    `rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors ${
+    `rounded-full border px-3.5 py-2 text-sm font-semibold ${press} ${
       active ? 'border-ink bg-ink text-ground' : 'border-line text-ink hover:border-ink'
     }`;
 
@@ -239,11 +242,17 @@ export default function FleetPage() {
         <div className="page-container pt-12 pb-8">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <h1 className="display text-[clamp(2.8rem,7vw,5.5rem)]">{typeSel ? plural(typeSel) : 'The fleet'}</h1>
+              {/* The heading rises from behind a mask whenever a new paint is picked */}
+              <h1 className="display text-[clamp(2.8rem,7vw,5.5rem)]">
+                <span className="mask-line"><span key={typeSel || 'All'}>{typeSel ? plural(typeSel) : 'The fleet'}</span></span>
+              </h1>
+              {/* The count stays mounted while the next results load (just hidden), so it glides from
+                  the last number to the new one instead of starting again from zero */}
               <p className={`mt-3 ${typeSel ? '' : 'text-muted'}`} aria-live="polite">
-                {loading
-                  ? 'Loading cars…'
-                  : `${totalCars} ${totalCars === 1 ? 'car' : 'cars'}${typeSel ? ` in ${paint.name}` : ' across eight factory paints'}${activeFilterCount > (typeSel ? 1 : 0) ? ', matching your filters' : ''}.`}
+                {loading && 'Loading cars…'}
+                <span hidden={loading}>
+                  <CountUp value={totalCars} /> {totalCars === 1 ? 'car' : 'cars'}{typeSel ? ` in ${paint.name}` : ' across eight factory paints'}{activeFilterCount > (typeSel ? 1 : 0) ? ', matching your filters' : ''}.
+                </span>
               </p>
             </div>
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
@@ -287,11 +296,12 @@ export default function FleetPage() {
                   aria-pressed={active}
                   onClick={() => updateFilter('type', t)}
                   style={p ? paintStyle(t) : undefined}
-                  className={`flex flex-shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors ${
+                  className={`group/chip flex flex-shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-semibold ${press} ${
                     active ? (p ? 'lacquer border-transparent' : 'border-ink bg-ink text-ground') : 'border-line hover:border-ink'
                   }`}
                 >
-                  {p && <span className="h-3 w-3 rounded-full ring-1 ring-black/10" style={{ background: p.hex }} aria-hidden="true" />}
+                  {/* The swatch dot swells on hover (the chip itself stays still under the pointer) */}
+                  {p && <span className="h-3 w-3 rounded-full ring-1 ring-black/10 transition-transform duration-200 ease-out group-hover/chip:scale-[1.3]" style={{ background: p.hex }} aria-hidden="true" />}
                   {t === 'All' ? 'All paints' : t}
                 </button>
               );
@@ -333,55 +343,62 @@ export default function FleetPage() {
             )}
           </AnimatePresence>
 
-          <section className="min-w-0 flex-1" aria-label="Cars" aria-busy={loading}>
-            {/* Skeleton only on the first load; on later filter changes the last results stay
-                (dimmed) until the new ones arrive, so the grid never blanks or replays its entrance */}
-            {loading && cars.length === 0 ? (
-              <CarGridSkeleton />
-            ) : error ? (
-              <div className="rounded-chip border border-line p-12 text-center">
-                <h2 className="font-wide font-black uppercase text-xl">Could not load the fleet</h2>
-                <p className="mt-2 text-muted">{error}</p>
-                <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="btn-ink mt-6">Try again</button>
-              </div>
-            ) : cars.length === 0 ? (
-              <div className="rounded-chip border border-dashed border-line p-12 text-center">
-                <h2 className="font-wide font-black uppercase text-xl">No cars match</h2>
-                <p className="mt-2 text-muted">Try another paint, or widen the price range.</p>
-                <button type="button" onClick={clearFilters} className="btn-ink mt-6">Clear all filters</button>
-              </div>
-            ) : (
-              <>
-                <Reveal
-                  wrap
-                  cellClassName="h-full"
-                  className={`grid grid-cols-1 gap-6 transition-opacity duration-150 ease-out sm:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`}
-                >
-                  {cars.map((car, i) => <CarCard key={car._id} car={car} index={i} />)}
-                </Reveal>
-                {totalPages > 1 && (
-                  <nav className="mt-12 flex items-center justify-center gap-2" aria-label="Pages">
-                    <button type="button" disabled={filters.page <= 1} onClick={() => goToPage(filters.page - 1)} aria-label="Previous page" className="grid h-11 w-11 place-items-center rounded-full border border-line hover:border-ink disabled:opacity-30">
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    {[...Array(totalPages)].map((_, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => goToPage(i + 1)}
-                        aria-current={filters.page === i + 1 ? 'page' : undefined}
-                        className={`grid h-11 w-11 place-items-center rounded-full text-sm font-bold ${filters.page === i + 1 ? 'bg-ink text-ground' : 'border border-line hover:border-ink'}`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                    <button type="button" disabled={filters.page >= totalPages} onClick={() => goToPage(filters.page + 1)} aria-label="Next page" className="grid h-11 w-11 place-items-center rounded-full border border-line hover:border-ink disabled:opacity-30">
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </nav>
-                )}
-              </>
-            )}
+          {/* relative: a state on its way out (skeleton, error, empty, results) is lifted out of the
+              flow and fades over the one arriving, so the swap cross-fades instead of popping */}
+          <section className="relative min-w-0 flex-1" aria-label="Cars" aria-busy={loading}>
+            <AnimatePresence mode="popLayout" initial={false}>
+              {/* Skeleton only on the first load; on later filter changes the last results stay
+                  (dimmed) until the new ones arrive, so the grid never blanks or replays its entrance */}
+              {loading && cars.length === 0 ? (
+                <m.div key="loading" variants={viewSwap} initial="initial" animate="animate" exit="exit">
+                  <CarGridSkeleton />
+                </m.div>
+              ) : error ? (
+                <m.div key="error" variants={viewSwap} initial="initial" animate="animate" exit="exit" className="rounded-chip border border-line p-12 text-center">
+                  <h2 className="font-wide font-black uppercase text-xl">Could not load the fleet</h2>
+                  <p className="mt-2 text-muted">{error}</p>
+                  <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="btn-ink mt-6">Try again</button>
+                </m.div>
+              ) : cars.length === 0 ? (
+                <m.div key="empty" variants={viewSwap} initial="initial" animate="animate" exit="exit" className="rounded-chip border border-dashed border-line p-12 text-center">
+                  <h2 className="font-wide font-black uppercase text-xl">No cars match</h2>
+                  <p className="mt-2 text-muted">Try another paint, or widen the price range.</p>
+                  <button type="button" onClick={clearFilters} className="btn-ink mt-6">Clear all filters</button>
+                </m.div>
+              ) : (
+                // The cards bring their own entrance (FleetGrid), so the results only fade on the way out
+                <m.div key="results" variants={viewSwap} initial={false} animate="animate" exit="exit">
+                  <FleetGrid cars={cars} dimmed={loading} />
+                  {/* Glides to the grid's new bottom edge when a page holds fewer cars. The layout
+                      wrapper stays mounted: framer-motion 11 never unregisters a layout element that
+                      unmounts inside a presence child, and these results could then never finish
+                      leaving (an invisible copy would sit over the next state and swallow clicks). */}
+                  <m.div layout="position" transition={{ layout: LAYOUT }}>
+                    {totalPages > 1 && (
+                      <nav className="mt-12 flex items-center justify-center gap-2" aria-label="Pages">
+                        <button type="button" disabled={filters.page <= 1} onClick={() => goToPage(filters.page - 1)} aria-label="Previous page" className={`grid h-11 w-11 place-items-center rounded-full border border-line hover:border-ink disabled:opacity-30 disabled:active:scale-100 ${iconPress}`}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        {[...Array(totalPages)].map((_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => goToPage(i + 1)}
+                            aria-current={filters.page === i + 1 ? 'page' : undefined}
+                            className={`grid h-11 w-11 place-items-center rounded-full text-sm font-bold ${iconPress} ${filters.page === i + 1 ? 'bg-ink text-ground' : 'border border-line hover:border-ink'}`}
+                          >
+                            {i + 1}
+                          </button>
+                        ))}
+                        <button type="button" disabled={filters.page >= totalPages} onClick={() => goToPage(filters.page + 1)} aria-label="Next page" className={`grid h-11 w-11 place-items-center rounded-full border border-line hover:border-ink disabled:opacity-30 disabled:active:scale-100 ${iconPress}`}>
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </nav>
+                    )}
+                  </m.div>
+                </m.div>
+              )}
+            </AnimatePresence>
           </section>
         </div>
       </div>

@@ -1,10 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { AnimatePresence, m } from 'framer-motion';
 import { Search, Trash2, Gift } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import LoadError from '../../components/admin/LoadError';
 import { TableSkeleton } from '../../components/ui/Skeletons';
+import { EASE, listItem } from '../../theme/motion';
+import useDebounced from '../../hooks/useDebounced';
+
+// Search filters this list quietly: the query settles first (debounced), rows that drop out leave at
+// once, the rows below glide up together a single time, and rows that match again fade back in.
+// Only a deleted customer's row fades away (AnimatePresence hands each leaving row the deleted id as
+// `custom`). Reduced motion: instant.
+const ROW_TRANSITION = { layout: { duration: 0.3, ease: EASE.out } };
+const DROP_AT_ONCE = { opacity: 0, transition: { duration: 0 } };
+const rowExit = (id) => (deletedId) => (deletedId === id ? listItem.exit : DROP_AT_ONCE);
+// Skeleton → table: the loaded list fades in where the skeleton was (once; searches don't replay it)
+const viewIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.2, ease: EASE.out } } };
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
@@ -14,6 +27,9 @@ export default function AdminUsersPage() {
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  // The customer just deleted (so only that row fades out) and a count of finished row exits (rowsKey)
+  const [deletedId, setDeletedId] = useState(null);
+  const [exitsDone, setExitsDone] = useState(0);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -41,6 +57,7 @@ export default function AdminUsersPage() {
         Number.isFinite(data?.removedReviews) && `${data.removedReviews} review${data.removedReviews === 1 ? '' : 's'} removed`,
       ].filter(Boolean);
       toast.success(`Customer account deleted${done.length ? `. ${done.join(', ')}.` : ''}`);
+      setDeletedId(deleteModal._id);
       setUsers(prev => prev.filter(u => u._id !== deleteModal._id));
       setDeleteModal(null);
       fetchUsers();
@@ -52,11 +69,14 @@ export default function AdminUsersPage() {
     }
   };
 
-  const q = search.trim().toLowerCase();
+  const q = useDebounced(search.trim().toLowerCase());
   const filtered = users.filter(u =>
     u.name?.toLowerCase().includes(q) ||
     u.email?.toLowerCase().includes(q)
   );
+  // Rows measure their layout only when this changes: the visible rows, or a leaving row finally
+  // gone (exitsDone ticks in the same render that removes it, so the rest glide up once)
+  const rowsKey = `${filtered.map(u => u._id).join('|')}#${exitsDone}`;
 
   return (
     <div className="space-y-6">
@@ -82,7 +102,7 @@ export default function AdminUsersPage() {
       ) : (
         <>
           {error && <LoadError message={error} onRetry={fetchUsers} />}
-          <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
+          <m.div {...viewIn} className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
             <div className={`overflow-x-auto transition-opacity duration-150 ${loading ? 'opacity-60' : ''}`} aria-busy={loading || undefined}>
               <table className="w-full text-sm">
                 <thead>
@@ -93,8 +113,9 @@ export default function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
+                  <AnimatePresence initial={false} custom={deletedId} onExitComplete={() => setExitsDone(n => n + 1)}>
                   {filtered.map(user => (
-                    <tr key={user._id} className="hover:bg-ink/5 transition-colors">
+                    <m.tr key={user._id} layout="position" layoutDependency={rowsKey} {...listItem} exit={rowExit(user._id)} transition={ROW_TRANSITION} className="hover:bg-ink/5 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 bg-ink/20 rounded-full flex items-center justify-center text-ink font-bold text-sm flex-shrink-0" aria-hidden="true">
@@ -125,20 +146,23 @@ export default function AdminUsersPage() {
                           onClick={() => openDelete(user)}
                           aria-label={`Delete ${user.name || user.email}`}
                           title="Delete customer"
-                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 transition-colors"
+                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.96]"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
-                    </tr>
+                    </m.tr>
                   ))}
+                  </AnimatePresence>
                   {filtered.length === 0 && (
-                    <tr><td colSpan={6} className="p-8 text-center text-muted">{users.length ? 'No users found matching search' : 'No customers yet.'}</td></tr>
+                    <m.tr initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2, ease: EASE.out } }}>
+                      <td colSpan={6} className="p-8 text-center text-muted">{users.length ? 'No users found matching search' : 'No customers yet.'}</td>
+                    </m.tr>
                   )}
                 </tbody>
               </table>
             </div>
-          </div>
+          </m.div>
         </>
       )}
 

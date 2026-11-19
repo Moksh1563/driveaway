@@ -5,8 +5,9 @@ import { Menu, X, LogOut, LayoutDashboard, ChevronDown, Shield, Tag } from 'luci
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import Logo from './Logo';
+import IconSwap from './IconSwap';
 import DiscountSubscribeModal from '../discounts/DiscountSubscribeModal';
-import { menuMotion, panelMotion, SPRING } from '../../theme/motion';
+import { EASE, menuMotion, SPRING } from '../../theme/motion';
 
 const LINKS = [
   { to: '/', label: 'Home' },
@@ -14,6 +15,22 @@ const LINKS = [
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
 ];
+
+// Mobile menu: the panel drops in under the bar (panelMotion's clock) and its rows follow in a brief
+// cascade; closing takes everything out together, faster.
+const mobilePanel = {
+  hidden: { opacity: 0, y: -8, transition: { duration: 0.16, ease: EASE.in } },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE.out, delayChildren: 0.03, staggerChildren: 0.03 } },
+};
+const mobileRow = {
+  hidden: { opacity: 0, y: -8, transition: { duration: 0.12, ease: EASE.in } },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.26, ease: EASE.out } },
+};
+
+// Pill controls in the bar: border answers hover, the pill gives a little under the press (the
+// round icon button a touch more)
+const pressable = 'transition-[border-color,transform] duration-150 ease-out active:scale-[0.98]';
+const iconPressable = 'transition-[border-color,transform] duration-150 ease-out active:scale-[0.96]';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -49,15 +66,24 @@ export default function Navbar() {
   };
 
   const linkClass = ({ isActive }) =>
-    `relative px-1 py-2 text-sm font-semibold transition-colors ${isActive ? 'text-ink' : 'text-muted hover:text-ink'}`;
+    `relative px-1 py-2 text-sm font-semibold transition-colors duration-200 ease-out ${isActive ? 'text-ink' : 'text-muted hover:text-ink'}`;
+
+  const raised = scrolled || mobileOpen;
 
   return (
     <>
       <header
-        className={`fixed top-0 inset-x-0 z-50 bg-ground border-b transition-[border-color,box-shadow] duration-300 ${
-          scrolled || mobileOpen ? 'border-line shadow-soft' : 'border-transparent'
+        className={`fixed top-0 inset-x-0 z-50 bg-ground border-b transition-[border-color] duration-300 ease-out ${
+          raised ? 'border-line' : 'border-transparent'
         }`}
       >
+        {/* The soft shadow lives on its own layer and fades in by opacity, so scrolling never repaints a shadow */}
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 -z-10 shadow-soft transition-opacity duration-300 ease-out ${
+            raised ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
         <nav className="page-container h-[72px] flex items-center justify-between gap-6" aria-label="Main">
           <Logo />
 
@@ -84,7 +110,7 @@ export default function Navbar() {
             <button
               type="button"
               onClick={() => setDiscountOpen(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-full border border-line text-sm font-semibold hover:border-ink transition-colors"
+              className={`inline-flex items-center gap-2 h-10 px-4 rounded-full border border-line text-sm font-semibold hover:border-ink ${pressable}`}
             >
               <Tag className="w-4 h-4" /> Offers
             </button>
@@ -97,13 +123,13 @@ export default function Navbar() {
                   onClick={() => setMenuOpen((o) => !o)}
                   aria-haspopup="menu"
                   aria-expanded={menuOpen}
-                  className="inline-flex items-center gap-2 h-10 pl-1.5 pr-3 rounded-full border border-line hover:border-ink transition-colors"
+                  className={`inline-flex items-center gap-2 h-10 pl-1.5 pr-3 rounded-full border border-line hover:border-ink ${pressable}`}
                 >
                   <span className="lacquer w-7 h-7 rounded-full grid place-items-center text-xs font-black">
                     {user.name?.charAt(0).toUpperCase()}
                   </span>
                   <span className="text-sm font-semibold">{user.name?.split(' ')[0]}</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ease-out ${menuOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                   {menuOpen && (
@@ -147,9 +173,11 @@ export default function Navbar() {
               onClick={() => setMobileOpen((o) => !o)}
               aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={mobileOpen}
-              className="w-10 h-10 grid place-items-center rounded-full border border-line"
+              className={`w-10 h-10 grid place-items-center rounded-full border border-line ${iconPressable}`}
             >
-              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <IconSwap swapKey={mobileOpen ? 'close' : 'open'}>
+                {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </IconSwap>
             </button>
           </div>
         </nav>
@@ -157,23 +185,27 @@ export default function Navbar() {
         <AnimatePresence>
           {mobileOpen && (
             <m.div
-              {...panelMotion}
+              variants={mobilePanel}
+              initial="hidden"
+              animate="shown"
+              exit="hidden"
               className="md:hidden overflow-hidden border-t border-line bg-ground"
             >
               <div className="page-container py-5 space-y-1">
                 {LINKS.map((l) => (
-                  <NavLink
-                    key={l.to}
-                    to={l.to}
-                    end={l.to === '/'}
-                    className={({ isActive }) =>
-                      `block py-2.5 font-wide font-black uppercase text-2xl tracking-tight ${isActive ? 'text-ink' : 'text-muted'}`
-                    }
-                  >
-                    {l.label}
-                  </NavLink>
+                  <m.div key={l.to} variants={mobileRow}>
+                    <NavLink
+                      to={l.to}
+                      end={l.to === '/'}
+                      className={({ isActive }) =>
+                        `block py-2.5 font-wide font-black uppercase text-2xl tracking-tight ${isActive ? 'text-ink' : 'text-muted'}`
+                      }
+                    >
+                      {l.label}
+                    </NavLink>
+                  </m.div>
                 ))}
-                <div className="pt-4 grid gap-2">
+                <m.div variants={mobileRow} className="pt-4 grid gap-2">
                   {/* The menu stays open behind the dialog, so closing it returns focus to this button */}
                   <button type="button" onClick={() => setDiscountOpen(true)} className="btn-line w-full">
                     <Tag className="w-4 h-4" /> Get offers and promo codes
@@ -190,7 +222,7 @@ export default function Navbar() {
                       <Link to="/register" className="btn-ink">Sign up</Link>
                     </div>
                   )}
-                </div>
+                </m.div>
               </div>
             </m.div>
           )}

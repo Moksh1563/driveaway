@@ -136,7 +136,7 @@ components:
 
 Driveaway is a factory swatch book that happens to rent cars. Every car category owns one paint, and any region of the page that is about a category wears that paint as a full lacquered field. Everything else, the chrome, the navigation, the forms, the tables, stays in neutral primer (light theme) or clear coat (dark theme) and plain ink, so the paint is the only colour you notice.
 
-Density is moderate and editorial: wide uppercase display type, generous section rhythm (80–96px), one 1280px container. Chroma is spent in large, deliberate blocks (hero fields, swatch chips, the closing hub band) rather than sprinkled as accents. The signature interaction is the repaint: choosing a swatch wipes the new paint across the field from the chip that was pressed.
+Density is moderate and editorial: wide uppercase display type, generous section rhythm (80–96px), one 1280px container. Chroma is spent in large, deliberate blocks (hero fields, paint chips, the closing hub band) rather than sprinkled as accents. The signature interaction is the repaint: choosing a paint chip widens it and wipes the new paint across the field from that chip.
 
 The system rejects the exotic-rental default of a dark photo hero, a gold call-to-action and a grid of equal cards. The old amber accent is retired and does not come back.
 
@@ -221,7 +221,7 @@ Hybrid: surfaces are flat and hairline-bordered at rest; shadows appear for thin
 
 ## Shapes
 
-Soft, swatch-like rectangles. Cards, chips and panels use an 18px chip corner; fields and inner rows 12px; small paint tags 8px; category badges 6px. All actions, status badges and avatars are full pills. The modal is 22px and the hero photo frame 28px. Signature paint panels (the hero photo frame, the first "how it works" card) cut one oversized bottom-left corner (96px and 56px) like a die-cut swatch; swatch chips in the fan and the garage are rounded on top only, standing on the edge below them. Borders are always 1px hairlines in the line colour; the empty garage uses a dashed hairline.
+Soft, swatch-like rectangles. Cards, chips and panels use an 18px chip corner; fields and inner rows 12px; small paint tags 8px; category badges 6px. All actions, status badges and avatars are full pills. The modal is 22px and the hero photo frame 28px. Signature paint panels (the hero photo frame, the first "how it works" card) cut one oversized bottom-left corner (96px and 56px) like a die-cut swatch; paint picker chips and garage chips are rounded on top only, standing on the edge below them. Borders are always 1px hairlines in the line colour; the empty garage uses a dashed hairline.
 
 ## Components
 
@@ -233,7 +233,7 @@ Confident ink pills; colour is earned, not default.
 - **Line:** transparent with a line border; hover darkens the border to ink. Secondary actions and section-head links.
 - **Ghost:** transparent; hover lays a 5% ink wash.
 - **Danger:** status-danger background, white text.
-- **All:** 200ms ease-out on colour and shadow, press scales to 0.98, disabled at 50% opacity. Focus is a 2px ink outline offset 3px (on-paint inside painted regions).
+- **All:** 200ms ease-out on colour and shadow, press scales to 0.98 (small icon-only buttons 0.96), disabled at 50% opacity. Focus is a 2px ink outline offset 3px (on-paint inside painted regions).
 
 ### Chips
 - **Paint tag:** a small lacquer tag (8px corners, label type) reading "02 · Supercar" pinned top-left on car photos.
@@ -258,8 +258,11 @@ Fixed 72px ground-coloured header; transparent bottom border at the top of the p
 ### Lacquer and Unlit (signature)
 **Lacquer** is how paint is applied: the current paint as a solid field with an overlay of a 118° white highlight sweep (14% → 4% → clear by 46%) and a 12% darkening along the bottom 30%. It is used for hero fields, swatch chips, paint tags, avatars, painted section bands and the card footer fill. **Unlit** is the same material switched off: saturation 15%, brightness 92%, no highlight. Any car that is not available renders unlit, with its status on a scrim pill.
 
-### Swatch fan and repaint (signature)
-The hero ends in a fan of lacquer chips, one per category (paint number in label type, category in title type, "from" price), standing on the bottom edge; the active chip shows an on-paint dot. Choosing a chip wipes the new paint across the field as a circle growing from that chip's position at the bottom edge (650ms, cubic-bezier(0.16, 1, 0.3, 1)); the headline cross-fades over 350ms. With reduced motion the paint swaps instantly. The dashboard's garage repeats the chip form: one top-rounded paint chip per booked car.
+### Paint picker and repaint (signature)
+The hero ends in a row of lacquer chips, one per category, standing on the bottom edge and rounded on top only (`components/home/PaintPicker.jsx`, styles under "Paint picker" in index.css). All eight fit in one row on desktop; on phones the row scrolls sideways, bleeding to the screen edge, and keeps the chosen chip centred. The chosen chip widens (flex-grow, 600ms ease-out, so its text never stretches) to show "Paint 02", the category in title type, the paint name with its car count, and the "from" price; it carries a 2px on-paint inner edge and an on-paint dot, so it reads as chosen even on a field of its own paint. The other chips slim to a strip with the paint number and, from 768px, the category set vertically. Inactive chips lift slightly on hover. It is a radio group: arrow keys, Home and End move the choice. Choosing a chip wipes the new paint across the field as a circle growing from that chip (620ms, cubic-bezier(0.65, 0, 0.35, 1)); the headline lines rise from a mask, and the new car photo comes into focus from a soft blur as the paint lands. With reduced motion the paint, chip and photo swap instantly. The dashboard's garage repeats the chip form: one top-rounded paint chip per booked car.
+
+### Motion
+Natural deceleration, no bounce: appear with ease-out (`--ease-out`, cubic-bezier(0.32, 0.72, 0, 1)), leave with ease-in on a shorter clock, move with ease-in-out. Feedback 150ms, state changes 200–300ms, overlays and layout 300–500ms, the repaint 600ms. Things coming into focus (section heads, hero photos, confirmations) fade up out of a soft blur; lists arrive as a short capped stagger. A car's photo glides from its card into the car page (View Transitions, `hooks/useViewTransitionNavigate.js`). Large hero imagery eases back as it scrolls away and the closing headline grows into place as it arrives (`hooks/useScrollDrift.js`); there is no scroll hijacking. Real numbers (prices, counts) count to their value with `CountUp`. Task screens (booking, dashboard, admin) keep motion to feedback, state and continuity. Reduced motion holds every scroll-linked and spatial effect still and swaps states instantly.
 
 ## Do's and Don'ts
 

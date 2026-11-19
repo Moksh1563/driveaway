@@ -8,12 +8,35 @@
  * rejection shows the server's message with Try again and Close. onComplete(result) runs after the
  * success screen.
  */
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, m } from 'framer-motion';
 import { X, Smartphone, CreditCard, Landmark, Wallet, Lock, CheckCircle2, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
-import { modalMotion, scrimMotion } from '../../theme/motion';
+import { EASE, SPRING, modalMotion, scrimMotion, viewSwap } from '../../theme/motion';
 import useFocusTrap from '../../hooks/useFocusTrap';
+import DrawnCheck from '../booking/DrawnCheck';
+
+// Steps and method panels swap with the shared viewSwap; a view that is leaving stops taking clicks
+// at once (a second press on a fading Pay or Try again must not pay twice), one that comes back takes them again
+const swap = {
+  initial: viewSwap.initial,
+  animate: { ...viewSwap.animate, pointerEvents: 'auto' },
+  exit: (dir) => ({ ...viewSwap.exit(dir), pointerEvents: 'none' }),
+};
+
+// Method panels cross-fade in place: the old one drops away fast (ease-out, 120ms) underneath while
+// the new one slides in on top from the side the pill travelled to, so the two never read as a jumble
+const panelSwap = {
+  initial: swap.initial,
+  animate: swap.animate,
+  exit: (dir) => ({ opacity: 0, x: dir * -8, pointerEvents: 'none', transition: { duration: 0.12, ease: EASE.out } }),
+};
+
+// The success lines settle in after the tick has started drawing
+const settle = (delay) => ({
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.3, delay, ease: EASE.out } },
+});
 
 const METHODS = [
   { id: 'UPI', label: 'UPI', icon: Smartphone },
@@ -50,20 +73,33 @@ function Choice({ name, options, value, onChange }) {
 
 export default function TestCheckoutModal({ isOpen, onClose, amount = 0, customerName = '', onPaymentSuccess, onComplete }) {
   const [method, setMethod] = useState('UPI');
+  const [methodDir, setMethodDir] = useState(0); // the method panel slides the way the pill travelled
   const [upiId, setUpiId] = useState(upiFromName(customerName));
   const [bank, setBank] = useState(BANKS[0]);
   const [wallet, setWallet] = useState(WALLETS[0]);
   const [step, setStep] = useState('form'); // form | processing | saving | success | error
   const [reference, setReference] = useState('');
   const [error, setError] = useState('');
+  // The form's height when Pay was pressed: the processing, success and error views keep it, so the
+  // checkout holds its size and only its contents dissolve from one step to the next
+  const [frame, setFrame] = useState(0);
   const titleId = useId();
   const upiInputId = useId();
   const dialogRef = useRef(null);
+  const formRef = useRef(null);
   const retryRef = useRef(null);
+  // The error view slides in after the last view has gone, so Try again takes focus as it mounts
+  const retryMounted = useCallback((el) => {
+    retryRef.current = el;
+    el?.focus();
+  }, []);
   const timers = useRef([]);
   // Bumped on every open, close and unmount, so a late timer or server reply from an earlier
   // session can never move this one on (or navigate after the page has gone)
   const session = useRef(0);
+  // One payment at a time: the form and the error view fade out rather than vanish, so a second press
+  // during the fade must do nothing. Set on Pay / Try again, cleared on every open and on a failure.
+  const busy = useRef(false);
   const handlers = useRef({ onPaymentSuccess, onComplete, onClose });
   useLayoutEffect(() => {
     handlers.current = { onPaymentSuccess, onComplete, onClose };
@@ -82,10 +118,13 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
   useLayoutEffect(() => {
     session.current += 1;
     clearTimers();
+    busy.current = false;
     if (isOpen) {
       setStep('form');
       setReference('');
       setError('');
+      setFrame(0);
+      setMethodDir(0);
     }
   }, [isOpen]);
   useEffect(() => () => {
@@ -124,9 +163,16 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
       later(() => (handlers.current.onComplete || handlers.current.onClose)?.(result), 1400);
     } catch (err) {
       if (session.current !== s) return;
+      busy.current = false;
       setError(err?.response?.data?.message || 'Your payment could not be completed. Please try again.');
       setStep('error');
     }
+  };
+
+  const retry = () => {
+    if (busy.current) return;
+    busy.current = true;
+    record();
   };
 
   const upiValid = UPI_RE.test(upiId.trim());
@@ -134,10 +180,24 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
 
   const pay = (e) => {
     e?.preventDefault();
-    if (!canPay) return;
+    if (!canPay || busy.current) return;
+    busy.current = true;
+    setFrame(formRef.current?.offsetHeight || 0);
     setStep('processing');
     later(record, method === 'UPI' ? 1500 : 1900);
   };
+
+  const chooseMethod = (id) => {
+    const from = METHODS.findIndex((x) => x.id === method);
+    const to = METHODS.findIndex((x) => x.id === id);
+    setMethodDir(Math.sign(to - from));
+    setMethod(id);
+  };
+
+  // Processing and saving are one view (the spinner keeps turning; only its line changes)
+  const view = step === 'saving' ? 'processing' : step;
+  const frameStyle = frame ? { minHeight: frame } : undefined;
+  const methodIndex = Math.max(0, METHODS.findIndex((x) => x.id === method));
 
   const processingText = {
     UPI: 'Processing your UPI payment…',
@@ -184,17 +244,32 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
                 </div>
               </div>
 
-              {step === 'form' && (
-                <form onSubmit={pay} className="p-6">
+              {/* The steps dissolve into each other inside a frame that holds its size */}
+              <AnimatePresence mode="wait" initial={false} custom={0}>
+              {view === 'form' && (
+                <m.form key="form" ref={formRef} custom={0} variants={swap} initial="initial" animate="animate" exit="exit" onSubmit={pay} className="p-6">
                   <div className="grid grid-cols-4 gap-2" role="tablist" aria-label="Payment method">
-                    {METHODS.map(({ id, label, icon: Icon }) => (
+                    {/* One ink pill that glides to the chosen method's cell, under the tabs. It stays
+                        mounted: framer-motion 11 never unregisters a layout element that unmounts inside
+                        a presence child, so a pill per tab (mounted only when chosen) would leave this
+                        form unable to finish leaving, and the processing view would never appear. */}
+                    <m.span
+                      layout
+                      layoutDependency={method}
+                      transition={SPRING}
+                      aria-hidden="true"
+                      className="pointer-events-none bg-ink"
+                      style={{ gridRowStart: 1, gridColumnStart: methodIndex + 1, borderRadius: 12 }}
+                    />
+                    {METHODS.map(({ id, label, icon: Icon }, i) => (
                       <button
                         key={id}
                         type="button"
                         role="tab"
                         aria-selected={method === id}
-                        onClick={() => setMethod(id)}
-                        className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-semibold transition-colors ${method === id ? 'border-ink bg-ink text-ground' : 'border-line hover:border-ink/40'}`}
+                        onClick={() => chooseMethod(id)}
+                        style={{ gridRowStart: 1, gridColumnStart: i + 1 }}
+                        className={`relative flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-semibold transition-colors duration-200 ${method === id ? 'border-ink text-ground' : 'border-line hover:border-ink/40'}`}
                       >
                         <Icon className="h-4 w-4" aria-hidden="true" />
                         {label}
@@ -202,7 +277,13 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
                     ))}
                   </div>
 
-                  <div className="mt-6 min-h-[188px] space-y-4" role="tabpanel">
+                  {/* overflow-y-clip: a taller old panel (net banking) is trimmed to the new height as it fades,
+                      instead of fading over the Pay button; sideways it stays free for the slide */}
+                  <div className="relative mt-6 min-h-[188px] overflow-y-clip" role="tabpanel">
+                    {/* The old method's panel lifts out and fades while the new one slides in from the pill's side */}
+                    <AnimatePresence mode="popLayout" initial={false} custom={methodDir}>
+                    {/* relative on every panel: the incoming one (later in the DOM) paints over the lifted-out old one */}
+                    <m.div key={method} custom={methodDir} variants={panelSwap} initial="initial" animate="animate" exit="exit" className="relative space-y-4">
                     {method === 'UPI' && (
                       <>
                         <label htmlFor={upiInputId} className="field-label">UPI ID</label>
@@ -240,40 +321,76 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
                     )}
                     {method === 'NETBANKING' && <Choice name="bank" options={BANKS} value={bank} onChange={setBank} />}
                     {method === 'WALLET' && <Choice name="wallet" options={WALLETS} value={wallet} onChange={setWallet} />}
+                    </m.div>
+                    </AnimatePresence>
                   </div>
 
                   <button type="submit" disabled={!canPay} className="btn-ink mt-6 w-full !py-4 text-base disabled:opacity-50">
                     Pay {total}
                   </button>
-                </form>
+                </m.form>
               )}
 
-              {(step === 'processing' || step === 'saving') && (
-                <div className="grid place-items-center gap-3 px-6 py-16 text-center" role="status">
+              {view === 'processing' && (
+                <m.div
+                  key="processing"
+                  custom={0}
+                  variants={swap}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  style={frameStyle}
+                  className="grid place-items-center content-center gap-3 px-6 py-16 text-center"
+                  role="status"
+                >
                   <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
-                  <p className="font-semibold">{step === 'saving' ? 'Confirming your booking…' : processingText}</p>
+                  {/* Processing → confirming: the line fades over, the spinner carries on */}
+                  <m.p key={step} initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.22, ease: EASE.out } }} className="font-semibold">
+                    {step === 'saving' ? 'Confirming your booking…' : processingText}
+                  </m.p>
                   <p className="text-sm text-muted">Please don&apos;t close this window.</p>
-                </div>
+                </m.div>
               )}
 
-              {step === 'success' && (
-                <div className="grid place-items-center gap-3 px-6 py-14 text-center" role="status">
+              {view === 'success' && (
+                <m.div
+                  key="success"
+                  custom={0}
+                  variants={swap}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  style={frameStyle}
+                  className="grid place-items-center content-center gap-3 px-6 py-14 text-center"
+                  role="status"
+                >
+                  {/* The ring draws round, then the tick draws in: no pop, no bounce */}
                   <m.span
-                    initial={{ scale: 0.9, opacity: 0 }}
+                    initial={{ scale: 0.92, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', duration: 0.4, bounce: 0.15 }}
+                    transition={{ duration: 0.32, ease: EASE.out }}
                     className="grid h-16 w-16 place-items-center rounded-full bg-[#1E8E4E]/15 text-[#1E8E4E]"
                   >
-                    <CheckCircle2 className="h-9 w-9" />
+                    <DrawnCheck circle delay={0.1} className="h-9 w-9" />
                   </m.span>
-                  <h3 className="font-wide font-black uppercase tracking-tight text-lg">Payment successful</h3>
-                  {reference && <p className="font-mono text-xs text-muted">Reference {reference}</p>}
-                  <p className="text-sm text-muted">Your booking is confirmed.</p>
-                </div>
+                  <m.h3 {...settle(0.28)} className="font-wide font-black uppercase tracking-tight text-lg">Payment successful</m.h3>
+                  {reference && <m.p {...settle(0.34)} className="font-mono text-xs text-muted">Reference {reference}</m.p>}
+                  <m.p {...settle(0.4)} className="text-sm text-muted">Your booking is confirmed.</m.p>
+                </m.div>
               )}
 
-              {step === 'error' && (
-                <div className="grid place-items-center gap-3 px-6 py-12 text-center" role="alert">
+              {view === 'error' && (
+                <m.div
+                  key="error"
+                  custom={0}
+                  variants={swap}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  style={frameStyle}
+                  className="grid place-items-center content-center gap-3 px-6 py-12 text-center"
+                  role="alert"
+                >
                   <span className="grid h-14 w-14 place-items-center rounded-full bg-danger/10 text-danger">
                     <AlertCircle className="h-8 w-8" aria-hidden="true" />
                   </span>
@@ -281,10 +398,11 @@ export default function TestCheckoutModal({ isOpen, onClose, amount = 0, custome
                   <p className="max-w-sm text-sm text-muted">{error}</p>
                   <div className="mt-3 flex w-full max-w-sm gap-3">
                     <button type="button" onClick={onClose} className="btn-line flex-1 !py-3.5">Close</button>
-                    <button ref={retryRef} type="button" onClick={record} className="btn-ink flex-1 !py-3.5">Try again</button>
+                    <button ref={retryMounted} type="button" onClick={retry} className="btn-ink flex-1 !py-3.5">Try again</button>
                   </div>
-                </div>
+                </m.div>
               )}
+              </AnimatePresence>
 
               <p className="flex items-center gap-2 border-t border-line px-6 py-3 text-xs text-muted">
                 <Lock className="h-3.5 w-3.5" aria-hidden="true" />

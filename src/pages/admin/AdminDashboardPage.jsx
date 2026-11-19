@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { m } from 'framer-motion';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { m, useInView, useReducedMotion } from 'framer-motion';
 import { IndianRupee, Car, Calendar, Users, TrendingUp, Clock } from 'lucide-react';
 import api from '../../api/axios';
 import StatCard from '../../components/admin/StatCard';
@@ -14,6 +14,54 @@ import EmailStatusCard from '../../components/admin/EmailStatusCard';
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const list = (v) => (Array.isArray(v) ? v : []);
 const rupees = (v) => `₹${Math.round(num(v)).toLocaleString('en-IN')}`;
+
+// Skeleton → overview: the loaded figures fade in where the skeleton was (quick; never holds data back)
+const viewIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.2, ease: EASE.out } } };
+
+/**
+ * Collected revenue as a CSS bar chart. The bars are drawn by default; as an enhancement they grow
+ * up from the baseline (scaleY from the bottom edge, so nothing reflows) in a short cascade, rising
+ * to meet their figures, which are readable from the start. A chart already on screen grows from its
+ * first paint; one below the fold grows as its top edge scrolls in, before the bars are in sight. If
+ * neither happens (or with reduced motion) the bars are simply there.
+ */
+function RevenueBars({ monthlyRevenue }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true });
+  const reduce = useReducedMotion();
+  // Measured before the first paint, so bars on screen never show full and then drop to grow
+  const [inViewAtMount, setInViewAtMount] = useState(false);
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r && r.top < window.innerHeight && r.bottom > 0) setInViewAtMount(true);
+  }, []);
+  const grow = !reduce && (inViewAtMount || inView);
+  const maxRev = Math.max(1, ...monthlyRevenue.map((entry) => num(entry.revenue)));
+
+  return (
+    <div ref={ref} className="flex items-end gap-3 h-44 pt-4 border-b border-line pb-2">
+      {monthlyRevenue.map((entry, i) => {
+        const revenue = num(entry.revenue);
+        const label = String(entry.month || '');
+        return (
+          <div key={label || i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+            <span className="text-muted text-[11px] font-bold">
+              ₹{revenue > 999 ? (revenue / 1000).toFixed(0) + 'K' : Math.round(revenue)}
+            </span>
+            <div
+              style={{ height: `${(revenue / maxRev) * 100}%`, '--d': `${Math.min(i, 5) * 50}ms` }}
+              className={`w-full rounded-t-lg min-h-[6px] bg-ink ${grow ? 'grow-up' : ''}`}
+              aria-hidden="true"
+            />
+            <span className="text-muted text-[11px] font-semibold text-center leading-tight" title={`${label}: ${rupees(revenue)}`}>
+              {label.split(' ')[0]}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
@@ -35,7 +83,6 @@ export default function AdminDashboardPage() {
 
   const s = stats || {};
   const monthlyRevenue = list(s.monthlyRevenue);
-  const maxRev = Math.max(1, ...monthlyRevenue.map((entry) => num(entry.revenue)));
   // Confirmed bookings (upcoming or on the road). Older APIs sent only activeRentals, which then meant the same count;
   // newer ones send confirmedBookings and use activeRentals for trips under way today.
   const hasConfirmed = s.confirmedBookings !== undefined;
@@ -54,10 +101,10 @@ export default function AdminDashboardPage() {
       <EmailStatusCard />
 
       {stats && (
-        <>
+        <m.div {...viewIn} className="space-y-6">
           {/* Main Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Collected Revenue" value={rupees(s.totalRevenue)} icon={IndianRupee} subtitle="Payments received, cancelled bookings excluded" />
+            <StatCard title="Collected Revenue" value={num(s.totalRevenue)} format={rupees} icon={IndianRupee} subtitle="Payments received, cancelled bookings excluded" />
             <StatCard title="Total Bookings" value={num(s.totalBookings)} icon={Calendar} subtitle={`${num(s.pendingBookings)} pending · ${num(s.completedBookings)} completed`} />
             <StatCard title="Total Cars" value={num(s.totalCars)} icon={Car} subtitle={`${num(s.availableCars)} available now`} />
             <StatCard title="Total Users" value={num(s.totalUsers)} icon={Users} />
@@ -81,30 +128,7 @@ export default function AdminDashboardPage() {
               {monthlyRevenue.length === 0 ? (
                 <p className="text-muted text-sm">No payments recorded yet.</p>
               ) : (
-                <div className="flex items-end gap-3 h-44 pt-4 border-b border-line pb-2">
-                  {monthlyRevenue.map((entry, i) => {
-                    const revenue = num(entry.revenue);
-                    const label = String(entry.month || '');
-                    return (
-                      <div key={label || i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                        <span className="text-muted text-[11px] font-bold">
-                          ₹{revenue > 999 ? (revenue / 1000).toFixed(0) + 'K' : Math.round(revenue)}
-                        </span>
-                        <m.div
-                          initial={{ scaleY: 0 }}
-                          animate={{ scaleY: 1 }}
-                          transition={{ duration: 0.4, delay: Math.min(i, 5) * 0.04, ease: EASE.out }}
-                          style={{ height: `${(revenue / maxRev) * 100}%`, transformOrigin: 'bottom' }}
-                          className="w-full rounded-t-lg min-h-[6px] bg-ink"
-                          aria-hidden="true"
-                        />
-                        <span className="text-muted text-[11px] font-semibold text-center leading-tight" title={`${label}: ${rupees(revenue)}`}>
-                          {label.split(' ')[0]}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <RevenueBars monthlyRevenue={monthlyRevenue} />
               )}
             </div>
 
@@ -169,7 +193,7 @@ export default function AdminDashboardPage() {
               </table>
             </div>
           </div>
-        </>
+        </m.div>
       )}
     </div>
   );

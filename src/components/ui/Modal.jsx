@@ -16,6 +16,8 @@ const sizeClasses = {
  * Dialog shell: scrim, panel, title bar and close button. Focus moves into the panel when it
  * opens, Tab stays inside it, Escape or the scrim closes it, and focus returns to the control
  * that opened it. `initialFocusRef` (optional) picks the element that gets focus first.
+ * Motion: the scrim fades and the panel scales up from 0.97 on the shared modal clock (220ms in,
+ * 160ms out, theme/motion.js); with reduced motion Framer skips both and the dialog simply appears.
  */
 export default function Modal({ isOpen, onClose, title, children, size = 'md', initialFocusRef }) {
   const panelRef = useRef(null);
@@ -60,7 +62,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', i
                     type="button"
                     onClick={onClose}
                     aria-label="Close"
-                    className="hit-area w-10 h-10 grid place-items-center rounded-full border border-line hover:border-ink transition-colors"
+                    className="hit-area w-10 h-10 grid place-items-center rounded-full border border-line hover:border-ink transition-[border-color,transform] duration-150 ease-out active:scale-[0.96]"
                   >
                     <X className="w-4 h-4" />
                   </button>

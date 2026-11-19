@@ -6,8 +6,11 @@ import api from '../api/axios';
 import CarCard from '../components/cars/CarCard';
 import StarRating from '../components/ui/StarRating';
 import Reveal from '../components/ui/Reveal';
+import CountUp from '../components/ui/CountUp';
+import PaintPicker from '../components/home/PaintPicker';
+import useScrollDrift from '../hooks/useScrollDrift';
 import { HUBS } from '../theme/hubs';
-import { PAINTS, PAINT_ORDER, carTitle, paintFor, paintStyle, plural, pluralLower, rupees } from '../theme/paints';
+import { PAINT_ORDER, carTitle, paintFor, paintStyle, plural, pluralLower, rupees } from '../theme/paints';
 import { sizedImage, imageSrcSet, handleImageError } from '../utils/image';
 import { CarGridSkeleton } from '../components/ui/Skeletons';
 import { EASE } from '../theme/motion';
@@ -32,7 +35,13 @@ export default function HomePage() {
   const [wipe, setWipe] = useState(null);                  // { type, x, key } while the new paint sweeps in
   const [slip, setSlip] = useState({ location: '', from: '', to: '' });
   const [reviews, setReviews] = useState([]);
-  const fanRef = useRef(null);
+  const heroRef = useRef(null);
+  const closeRef = useRef(null);
+  // As the hero scrolls away the headline drifts and dims and the photo eases inside its frame;
+  // the closing headline grows into place as it arrives. Reduced motion holds all of it still.
+  const heroDrift = useScrollDrift(heroRef, { y: [0, 36], opacity: [1, 0.25] });
+  const photoDrift = useScrollDrift(heroRef, { y: [0, 64] });
+  const closeDrift = useScrollDrift(closeRef, { scale: [0.9, 1], opacity: [0.35, 1], offset: ['start end', 'center center'] });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -109,14 +118,6 @@ export default function HomePage() {
   };
 
   const heroImg = group?.hero?.images?.main;
-
-  useEffect(() => {
-    const row = fanRef.current;
-    const chip = row?.querySelector('[aria-checked="true"]')?.parentElement; // the chip's wrapper
-    if (!row || !chip || row.scrollWidth <= row.clientWidth) return;
-    const target = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
-    row.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
-  }, [selected, book.length]);
   const heroId = group?.hero?._id;
 
   // Real reviews of the car currently on show (no invented testimonials)
@@ -133,6 +134,7 @@ export default function HomePage() {
     <div>
       {/* ─────────────── FIRST VIEWPORT: the paint you pick ─────────────── */}
       <section
+        ref={heroRef}
         aria-label={`${plural(selected)} in ${paint.name}`}
         style={paintStyle(selected)}
         className="on-paint relative mt-[72px] overflow-hidden text-on-paint"
@@ -149,9 +151,9 @@ export default function HomePage() {
           />
         )}
 
-        <div className="page-container relative pt-6 pb-36 lg:pt-8">
+        <div className="page-container relative pt-6 pb-40 lg:pt-8">
           {/* Headline: full width, sized so its longest line always fits */}
-          <div style={{ containerType: 'inline-size' }}>
+          <m.div style={{ containerType: 'inline-size', y: heroDrift.y, opacity: heroDrift.opacity }}>
             <h1
               key={selected}
               className="display"
@@ -160,7 +162,7 @@ export default function HomePage() {
               <span className="mask-line"><span style={{ '--i': 0 }}>{plural(selected)},</span></span>
               <span className="mask-line"><span style={{ '--i': 1 }}>in {paint.name}.</span></span>
             </h1>
-          </div>
+          </m.div>
 
           <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-12 lg:gap-10">
           <Reveal className="lg:col-span-5 flex flex-col" delay={250} stagger={90}>
@@ -169,7 +171,13 @@ export default function HomePage() {
             </p>
             <p className="mt-4 code-label text-[13px]">
               Paint {paint.no}
-              {group ? ` · ${group.list.length} ${group.list.length === 1 ? 'car' : 'cars'} · from ${rupees(group.from)} a day` : ''}
+              {group && (
+                <>
+                  {` · ${group.list.length} ${group.list.length === 1 ? 'car' : 'cars'} · from `}
+                  <CountUp value={group.from} format={rupees} fromZero={false} />
+                  {' a day'}
+                </>
+              )}
               {' · '}{HUBS.length} pickup hubs
             </p>
 
@@ -236,21 +244,25 @@ export default function HomePage() {
           {/* The car, in a lacquer chip frame */}
           <div className="enter order-first lg:order-none lg:col-span-7" style={{ '--d': '120ms' }}>
             <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] rounded-bl-[96px] bg-black/20 shadow-lift lg:aspect-auto lg:h-full lg:min-h-[340px]">
-              <AnimatePresence initial={false}>
-                <m.img
-                  key={heroImg || 'hero'}
-                  initial={{ opacity: 0, scale: 1.03 }}
-                  animate={{ opacity: 1, scale: 1, transition: { duration: 0.3, delay: 0.22, ease: EASE.out } }}
-                  exit={{ opacity: 0, transition: { duration: 0.22, delay: 0.22, ease: EASE.in } }}
-                  src={heroImg ? sizedImage(heroImg, 1400, 75) : '/images/luxury_hypercars_header.webp'}
-                  srcSet={heroImg ? imageSrcSet(heroImg, [800, 1200, 1600]) : undefined}
-                  sizes="(min-width: 1024px) 55vw, 100vw"
-                  alt={group?.hero ? carTitle(group.hero) : 'Driveaway hypercars'}
-                  fetchpriority="high"
-                  onError={(e) => handleImageError(e, 1200)}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              </AnimatePresence>
+              {/* Taller than the frame so the photo can ease down inside it as the hero scrolls away */}
+              <m.div className="absolute inset-x-0 -top-[12%] bottom-0" style={{ y: photoDrift.y }}>
+                <AnimatePresence initial={false}>
+                  {/* The next car comes into focus as the new paint lands; the last one dissolves */}
+                  <m.img
+                    key={heroImg || 'hero'}
+                    initial={{ opacity: 0, scale: 1.06, filter: 'blur(12px)' }}
+                    animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transition: { duration: 0.7, delay: 0.25, ease: EASE.out } }}
+                    exit={{ opacity: 0, transition: { duration: 0.35, delay: 0.25, ease: EASE.in } }}
+                    src={heroImg ? sizedImage(heroImg, 1400, 75) : '/images/luxury_hypercars_header.webp'}
+                    srcSet={heroImg ? imageSrcSet(heroImg, [800, 1200, 1600]) : undefined}
+                    sizes="(min-width: 1024px) 55vw, 100vw"
+                    alt={group?.hero ? carTitle(group.hero) : 'Driveaway hypercars'}
+                    fetchpriority="high"
+                    onError={(e) => handleImageError(e, 1200)}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                </AnimatePresence>
+              </m.div>
               {/* clear-coat highlight, plus one gloss sweep when the page first loads */}
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,rgb(255_255_255/0.18),transparent_32%)]" />
               <span className="sheen-sweep" aria-hidden="true" />
@@ -273,61 +285,24 @@ export default function HomePage() {
         </div>
         </div>
 
-        {/* Swatch fan: the paint book. Choosing a chip repaints the page. */}
+        {/* Paint picker: the paint book. Choosing a chip widens it and repaints the page from it. */}
         <div className="absolute inset-x-0 bottom-0">
           <div className="page-container">
-            <div
-              ref={fanRef}
-              role="radiogroup"
-              aria-label="Choose a category"
-              className="-mx-4 flex items-end overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 pt-8 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              {(book.length ? book : PAINT_ORDER.slice(0, 5).map((type) => ({ type, list: [] }))).map((g, i, all) => {
-                const p = PAINTS[g.type];
-                const active = g.type === selected;
-                const activeIndex = all.findIndex((x) => x.type === selected);
-                const tilt = active ? 0 : (i < activeIndex ? -1 : 1) * (2 + Math.min(Math.abs(i - activeIndex), 3));
-                return (
-                  <div
-                    key={g.type}
-                    className={`enter-deal flex-shrink-0 ${i > 0 ? '-ml-2' : ''}`}
-                    style={{ '--d': `${450 + i * 70}ms`, '--tilt': `${(i % 2 ? 1 : -1) * 4}deg`, zIndex: 20 - Math.abs(i - activeIndex), position: 'relative' }}
-                  >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={(e) => choose(g.type, e)}
-                    style={{
-                      ...paintStyle(g.type),
-                      transform: `translateY(${active ? -14 : 10}px) rotate(${tilt}deg)`,
-                      transformOrigin: 'bottom center',
-                    }}
-                    className={`lacquer relative flex h-32 w-[150px] flex-shrink-0 flex-col justify-between rounded-t-[18px] border border-b-0 border-white/25 pl-5 pr-4 pt-3.5 pb-7 text-left shadow-chip transition-transform duration-300 ease-in-out sm:w-[172px]`}
-                  >
-                    <span className="code-label text-[11px]">Paint {p.no}</span>
-                    <span>
-                      <span className="block font-wide font-black uppercase leading-none tracking-tight text-[17px]">{g.type}</span>
-                      <span className="mt-1 block text-xs">
-                        {p.name}{g.list.length ? ` · ${g.list.length}` : ''}
-                      </span>
-                    </span>
-                    {active && <span className="absolute right-3.5 top-3.5 h-2.5 w-2.5 rounded-full bg-on-paint" aria-hidden="true" />}
-                  </button>
-                  </div>
-                );
-              })}
-            </div>
+            <PaintPicker
+              groups={book.length ? book : PAINT_ORDER.slice(0, 5).map((type) => ({ type, list: [] }))}
+              selected={selected}
+              onChoose={choose}
+            />
           </div>
         </div>
       </section>
 
       {/* ─────────────── The cars in this paint ─────────────── */}
       <section style={paintStyle(selected)} className="page-container py-20 sm:py-24" aria-labelledby="line-heading">
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-line pb-6">
+        <Reveal variant="focus" stagger={90} className="flex flex-wrap items-end justify-between gap-6 border-b border-line pb-6">
           <div>
             <h2 id="line-heading" className="display text-4xl sm:text-5xl">
-              {group ? `${group.ready.length} ready to drive` : 'The fleet'}
+              {group ? <><CountUp value={group.ready.length} /> ready to drive</> : 'The fleet'}
             </h2>
             <p className="mt-3 text-muted">
               {plural(selected)} in {paint.name}
@@ -342,7 +317,7 @@ export default function HomePage() {
           <Link to={`/fleet?type=${selected}`} className="btn-line">
             All {pluralLower(selected)} <ArrowRight className="w-4 h-4" />
           </Link>
-        </div>
+        </Reveal>
 
         {loading ? (
           <CarGridSkeleton count={3} className="mt-10" />
@@ -362,12 +337,12 @@ export default function HomePage() {
       {/* ─────────────── How a booking goes: the axis itself, paint to car to keys ─────────────── */}
       <section className="border-y border-line bg-surface" aria-labelledby="how-heading">
         <div className="page-container py-20 sm:py-24">
-          <div className="flex flex-wrap items-end justify-between gap-6">
+          <Reveal variant="focus" stagger={90} className="flex flex-wrap items-end justify-between gap-6">
             <h2 id="how-heading" className="display text-4xl sm:text-5xl">Paint, car, keys.</h2>
             <p className="max-w-sm text-muted">
               Booking takes about two minutes. Pay online now, or pay in cash when you collect the car.
             </p>
-          </div>
+          </Reveal>
           <Reveal as="ol" variant="deal" stagger={90} className="mt-10 grid gap-4 md:grid-cols-3">
             <li style={paintStyle(selected)} className="lacquer on-paint flex min-h-[260px] flex-col justify-between rounded-chip rounded-bl-[56px] p-7 shadow-chip">
               <span className="font-wide font-black text-5xl" aria-hidden="true">1</span>
@@ -402,14 +377,14 @@ export default function HomePage() {
       {/* ─────────────── Real reviews of the car on show ─────────────── */}
       {reviews.length > 0 && group?.hero && (
         <section className="page-container py-20 sm:py-24" aria-labelledby="reviews-heading">
-          <div className="flex flex-wrap items-end justify-between gap-6">
+          <Reveal variant="focus" stagger={90} className="flex flex-wrap items-end justify-between gap-6">
             <h2 id="reviews-heading" className="display text-4xl sm:text-5xl">
               Drivers on the {group.hero.name}
             </h2>
             <Link to={`/cars/${group.hero._id}#reviews`} className="btn-line">
               {group.hero.averageRating} from {group.hero.totalReviews} reviews <ArrowRight className="w-4 h-4" />
             </Link>
-          </div>
+          </Reveal>
           <Reveal className="mt-10 grid gap-6 md:grid-cols-3">
             {reviews.slice(0, 3).map((r) => (
               <figure key={r._id} className="flex flex-col rounded-chip border border-line p-7">
@@ -429,9 +404,14 @@ export default function HomePage() {
       <section style={paintStyle(selected)} className="lacquer on-paint" aria-labelledby="hubs-heading">
         <div className="page-container grid gap-12 py-20 sm:py-24 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            <h2 id="hubs-heading" className="display text-[clamp(2.4rem,5vw,4.5rem)]">
+            <m.h2
+              ref={closeRef}
+              id="hubs-heading"
+              style={{ scale: closeDrift.scale, opacity: closeDrift.opacity, transformOrigin: 'left bottom' }}
+              className="display text-[clamp(2.4rem,5vw,4.5rem)]"
+            >
               Your {paint.name} is waiting.
-            </h2>
+            </m.h2>
             <p className="mt-5 max-w-sm text-lg">Collect it from any of eight hubs across Ahmedabad.</p>
             <Link to={`/fleet?type=${selected}`} className="btn mt-8 !bg-on-paint !text-paint !px-8 !py-4 text-base hover:!shadow-lift">
               Book {pluralLower(selected)} <ArrowRight className="w-4 h-4" />

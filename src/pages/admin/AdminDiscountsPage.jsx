@@ -12,22 +12,42 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, m } from 'framer-motion';
 import { Tag, Send, Plus, Trash2, Users, Bell, Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
+import CountUp from '../../components/ui/CountUp';
+import { ERROR_IN } from '../../components/booking/FieldError';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import LoadError from '../../components/admin/LoadError';
 import CreateDiscountForm from '../../components/admin/CreateDiscountForm';
+import IconSwap from '../../components/layout/IconSwap';
 import { TableSkeleton } from '../../components/ui/Skeletons';
+import { EASE, LAYOUT, listItem } from '../../theme/motion';
 import {
   fmtDateIST, isExpired, isUsedUp, hasUseLimit, hasPerUserLimit,
   broadcastBlockReason, readBroadcastResult, broadcastSummary,
 } from '../../components/admin/discountRules';
 
 const money = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+
+// Promo rows: a deleted code fades away and the rest close up; a new code fades in where it lands
+const ROW_TRANSITION = { layout: { duration: 0.3, ease: EASE.out } };
+// Skeleton → table: the loaded codes fade in where the skeleton was
+const viewIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.2, ease: EASE.out } } };
+// Small row buttons give a little under the press (colour still answers hover): labelled buttons as
+// much as any button, the icon buttons a touch more
+const press = 'duration-150 ease-out active:scale-[0.98]';
+const iconPress = 'duration-150 ease-out active:scale-[0.96]';
+// Broadcast dialog: the note form steps out and the result comes into focus (the counts are shown
+// as they are: a send result never ticks through made-up figures)
+const composeOut = { opacity: 0, transition: { duration: 0.15, ease: EASE.in } };
+const resultIn = {
+  initial: { opacity: 0, y: 8, filter: 'blur(4px)' },
+  animate: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.36, ease: EASE.out } },
+};
 
 export default function AdminDiscountsPage() {
 
@@ -149,6 +169,7 @@ export default function AdminDiscountsPage() {
     }
   };
 
+  const tileKey = loading ? 'loading' : 'ready';
   const activeCount = discounts.filter(d => d.isActive && !isExpired(d) && !isUsedUp(d)).length;
 
   return (
@@ -175,14 +196,16 @@ export default function AdminDiscountsPage() {
         </Button>
       </div>
 
-      {/* Metric Cards */}
+      {/* Metric Cards: each figure shows its real value at once and only glides when a refresh changes
+          it. While the first fetch runs the tiles read 0; keying on `loading` mounts the loaded figure
+          fresh, so it lands as-is instead of counting up from that placeholder. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-surface border border-line rounded-chip p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted">Total Promo Codes</span>
             <Tag className="w-4 h-4 text-muted" aria-hidden="true" />
           </div>
-          <div className="text-2xl font-black text-ink mt-2">{discounts.length}</div>
+          <div className="text-2xl font-black text-ink mt-2"><CountUp key={tileKey} value={discounts.length} duration={700} fromZero={false} /></div>
           <p className="text-[11px] text-muted mt-0.5">
             {activeCount} usable right now
           </p>
@@ -193,7 +216,7 @@ export default function AdminDiscountsPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-muted">Discount Subscribers</span>
             <Bell className="w-4 h-4 text-muted" aria-hidden="true" />
           </div>
-          <div className="text-2xl font-black text-ink mt-2">{subscriberCount}</div>
+          <div className="text-2xl font-black text-ink mt-2"><CountUp key={tileKey} value={subscriberCount} duration={700} fromZero={false} /></div>
           <p className="text-[11px] text-muted mt-0.5">Opted-in for discount emails</p>
         </div>
 
@@ -202,11 +225,15 @@ export default function AdminDiscountsPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-muted">Registered Users</span>
             <Users className="w-4 h-4 text-muted" aria-hidden="true" />
           </div>
-          <div className="text-2xl font-black text-ink mt-2">{userCount}</div>
+          <div className="text-2xl font-black text-ink mt-2"><CountUp key={tileKey} value={userCount} duration={700} fromZero={false} /></div>
           <p className="text-[11px] text-muted mt-0.5">Eligible for discount broadcasts</p>
         </div>
       </div>
 
+      {/* Opening the form: it fades in under the bar while the list below glides down to make room.
+          Closing: the form fades out, then the list glides back up (LayoutGroup tells the list when
+          the form has gone). Reduced motion: both simply appear and disappear. */}
+      <LayoutGroup>
       {/* Create Promo Code Form */}
       <AnimatePresence>
         {showForm && (
@@ -221,7 +248,7 @@ export default function AdminDiscountsPage() {
       {error && discounts.length > 0 && <LoadError message={error} onRetry={fetchDiscounts} />}
 
       {/* Discounts List */}
-      <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
+      <m.div layout="position" transition={{ layout: LAYOUT }} className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
         <div className="p-4 sm:p-5 border-b border-line flex items-center justify-between">
           <h2 className="text-base font-bold text-ink">Promo Codes</h2>
           <span className="text-xs text-muted">{discounts.length} codes registered</span>
@@ -236,7 +263,7 @@ export default function AdminDiscountsPage() {
             No promo codes created yet. Click "Create Promo Code" to get started!
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <m.div {...viewIn} className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-raised text-xs font-bold uppercase tracking-wider text-muted border-b border-line">
                 <tr>
@@ -250,6 +277,7 @@ export default function AdminDiscountsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
+                <AnimatePresence initial={false}>
                 {discounts.map((discount) => {
                   const expired = isExpired(discount);
                   const usedUp = isUsedUp(discount);
@@ -257,7 +285,7 @@ export default function AdminDiscountsPage() {
                     || (emailReady ? '' : 'Email is not set up on the server, so offer emails cannot be sent.');
                   const used = Number(discount.usedCount) || 0;
                   return (
-                    <tr key={discount._id} className="hover:bg-ground/50 transition-colors">
+                    <m.tr key={discount._id} layout="position" {...listItem} transition={ROW_TRANSITION} className="hover:bg-ground/50 transition-colors">
                       {/* Code */}
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-2">
@@ -267,11 +295,14 @@ export default function AdminDiscountsPage() {
                           <button
                             type="button"
                             onClick={() => handleCopy(discount.code)}
-                            className="hit-area p-1.5 text-muted hover:text-ink rounded-lg hover:bg-ink/5 transition-colors"
+                            className={`hit-area p-1.5 text-muted hover:text-ink rounded-lg hover:bg-ink/5 transition-[color,background-color,transform] ${iconPress}`}
                             title="Copy code"
                             aria-label={copiedCode === discount.code ? `Copied ${discount.code}` : `Copy code ${discount.code}`}
                           >
-                            {copiedCode === discount.code ? <Check className="w-4 h-4 text-ok" /> : <Copy className="w-4 h-4" />}
+                            {/* Copy → tick: the confirmation cross-fades in place, and back after two seconds */}
+                            <IconSwap swapKey={copiedCode === discount.code ? 'copied' : 'copy'} turn={0}>
+                              {copiedCode === discount.code ? <Check className="w-4 h-4 text-ok" /> : <Copy className="w-4 h-4" />}
+                            </IconSwap>
                           </button>
                         </div>
                         {discount.createdAt && (
@@ -323,14 +354,14 @@ export default function AdminDiscountsPage() {
                             type="button"
                             onClick={() => handleToggle(discount._id)}
                             aria-label={`${discount.code} is ${discount.isActive ? 'active' : 'inactive'}. ${discount.isActive ? 'Deactivate' : 'Activate'} it`}
-                            className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full cursor-pointer border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
+                            className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full cursor-pointer border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${press} ${
  discount.isActive
  ? 'bg-ok/10 text-ok border-ok/25 hover:bg-ok/20'
  : 'bg-ink/5 text-muted border-line hover:bg-ink/10'
  }`}
                             title="Click to toggle status"
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${discount.isActive ? 'bg-ok' : 'bg-muted'}`} aria-hidden="true" />
+                            <span className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ease-out ${discount.isActive ? 'bg-ok' : 'bg-muted'}`} aria-hidden="true" />
                             {discount.isActive ? 'Active' : 'Inactive'}
                           </button>
                           {(expired || usedUp) && (
@@ -349,7 +380,7 @@ export default function AdminDiscountsPage() {
                               onClick={() => openBroadcast(discount)}
                               disabled={!!blocked}
                               aria-label={blocked ? `Broadcast ${discount.code} (unavailable: ${blocked})` : `Broadcast ${discount.code}`}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-line hover:border-ink text-ink rounded-lg text-xs font-extrabold transition-[color,background-color,border-color,opacity,box-shadow,transform] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-line"
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-line hover:border-ink text-ink rounded-lg text-xs font-extrabold transition-[color,background-color,border-color,opacity,box-shadow,transform] ${press} disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-line disabled:active:scale-100`}
                             >
                               <Send className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>Broadcast</span>
@@ -360,7 +391,7 @@ export default function AdminDiscountsPage() {
                           <button
                             type="button"
                             onClick={() => openDelete(discount)}
-                            className="hit-area p-1.5 text-muted hover:text-danger rounded-lg hover:bg-danger/10 transition-colors"
+                            className={`hit-area p-1.5 text-muted hover:text-danger rounded-lg hover:bg-danger/10 transition-[color,background-color,transform] ${iconPress}`}
                             title="Delete code"
                             aria-label={`Delete code ${discount.code}`}
                           >
@@ -368,14 +399,16 @@ export default function AdminDiscountsPage() {
                           </button>
                         </div>
                       </td>
-                    </tr>
+                    </m.tr>
                   );
                 })}
+                </AnimatePresence>
               </tbody>
             </table>
-          </div>
+          </m.div>
         )}
-      </div>
+      </m.div>
+      </LayoutGroup>
 
       {/* Broadcast Modal */}
       <Modal isOpen={!!broadcastTarget} onClose={closeBroadcast} title="Broadcast Promo Code" size="md">
@@ -391,13 +424,16 @@ export default function AdminDiscountsPage() {
               </p>
             </div>
 
+            <AnimatePresence mode="wait" initial={false}>
             {broadcastResult ? (
-              <div className="space-y-4" role="status">
+              <m.div key="result" {...resultIn} className="space-y-4" role="status">
                 {broadcastResult.sent !== undefined ? (
                   <div className="grid grid-cols-3 gap-3 text-center">
                     {[['Sent', broadcastResult.sent], ['Failed', broadcastResult.failed], ['Skipped', broadcastResult.skipped]].map(([label, value]) => (
                       <div key={label} className="rounded-xl border border-line bg-raised p-3">
-                        <p className={`font-wide font-black text-xl ${label === 'Failed' && value > 0 ? 'text-danger' : 'text-ink'}`}>{value}</p>
+                        <p className={`font-wide font-black text-xl ${label === 'Failed' && value > 0 ? 'text-danger' : 'text-ink'}`}>
+                          <CountUp value={value} duration={600} fromZero={false} />
+                        </p>
                         <p className="code-label text-[11px] text-muted mt-0.5">{label}</p>
                       </div>
                     ))}
@@ -407,9 +443,9 @@ export default function AdminDiscountsPage() {
                 <div className="flex justify-end">
                   <Button onClick={closeBroadcast}>Done</Button>
                 </div>
-              </div>
+              </m.div>
             ) : (
-              <>
+              <m.div key="compose" exit={composeOut} className="space-y-4">
                 <div>
                   <label htmlFor="broadcast-message" className="block text-xs font-bold text-muted mb-1.5 uppercase tracking-wider">
                     Custom Headline or Note (Optional)
@@ -426,7 +462,11 @@ export default function AdminDiscountsPage() {
                 </div>
 
                 {broadcastError && (
-                  <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 font-semibold text-danger">
+                  <p
+                    key={broadcastError}
+                    role="alert"
+                    className={`rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 font-semibold text-danger ${ERROR_IN}`}
+                  >
                     {broadcastError}
                   </p>
                 )}
@@ -437,8 +477,9 @@ export default function AdminDiscountsPage() {
                     Send Broadcast Now
                   </Button>
                 </div>
-              </>
+              </m.div>
             )}
+            </AnimatePresence>
           </div>
         )}
       </Modal>

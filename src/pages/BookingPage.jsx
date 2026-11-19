@@ -12,7 +12,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronLeft, Check, Wrench } from 'lucide-react';
+import { AnimatePresence, m } from 'framer-motion';
+import { ChevronRight, ChevronLeft, Wrench } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +21,10 @@ import Button from '../components/ui/Button';
 import PayBookingModal from '../components/booking/PayBookingModal';
 import DriverStep from '../components/booking/DriverStep';
 import { FIELD_CLASS, REQUIRED_DRIVER_FIELDS, OPTIONAL_DRIVER_FIELDS } from '../components/booking/driverFields';
-import FieldError from '../components/booking/FieldError';
+import FieldError, { ERROR_IN as NOTE_IN } from '../components/booking/FieldError';
+import GlideNumber from '../components/booking/GlideNumber';
+import DrawnCheck from '../components/booking/DrawnCheck';
+import { EASE, LAYOUT, SPRING, viewSwap } from '../theme/motion';
 import useFieldErrors, { isEmail, isIndianMobile, isLicence } from '../hooks/useFieldErrors';
 import usePageTitle from '../hooks/usePageTitle';
 import { sizedImage, handleImageError } from '../utils/image';
@@ -36,6 +40,22 @@ const PAYMENT_METHODS = [
 ];
 const STEPS = ['Trip', 'Driver', 'Confirm'];
 const SHORT_DAY = { day: 'numeric', month: 'short' };
+
+// Steps slide in the direction of travel (Continue: from the right, Back: from the left). The step
+// that is leaving stops taking clicks at once, and one that comes back takes them again.
+const stepSwap = {
+  initial: viewSwap.initial,
+  animate: { ...viewSwap.animate, pointerEvents: 'auto' },
+  exit: (dir) => ({ ...viewSwap.exit(dir), pointerEvents: 'none' }),
+};
+// A new fare line (rental, promo, points) fades down into place while the lines under it glide
+// down to make room; a line that goes fades out and the rest glide up.
+const fareLine = {
+  initial: { opacity: 0, y: -6 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.24, ease: EASE.out } },
+  exit: { opacity: 0, transition: { duration: 0.14, ease: EASE.in } },
+};
+const FARE_GLIDE = { layout: LAYOUT };
 
 // Booking fields pre-filled from the signed-in customer's profile
 const PROFILE_FIELDS = {
@@ -64,6 +84,7 @@ export default function BookingPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const [step, setStep] = useState(1);
+  const [dir, setDir] = useState(1); // direction of the last step change: 1 forward, -1 back
   const [car, setCar] = useState(null);
   const [loadState, setLoadState] = useState('loading'); // loading | ready | notfound | error
   const [loadError, setLoadError] = useState('');
@@ -74,6 +95,21 @@ export default function BookingPage() {
   const [discountInfo, setDiscountInfo] = useState(null);
   const { errors, field, errorId, clear, check, setErrors } = useFieldErrors('booking');
   const stepTop = useRef(null);
+  // Errors for a step that is still waiting to slide in: focused once it is on the page
+  const pendingFocus = useRef(null);
+
+  const goToStep = (n) => {
+    setDir(n > step ? 1 : -1);
+    setStep(n);
+  };
+
+  // The new step mounts only after the old one has slid out, so a field on it can take focus now
+  const afterStepSwap = () => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    pendingFocus.current = null;
+    check(pending, Object.keys(pending));
+  };
 
   const [form, setForm] = useState(() => {
     const trip = readTrip();
@@ -267,8 +303,10 @@ export default function BookingPage() {
       if (status === 409 && code === 'DATES_TAKEN') {
         // Someone booked these dates first: back to the dates, with the latest booked ranges
         loadCar(true);
-        setStep(1);
-        check({ pickupDate: message }, ['pickupDate']);
+        goToStep(1);
+        const dateError = { pickupDate: message };
+        pendingFocus.current = dateError;
+        check(dateError, ['pickupDate']);
       } else {
         // The points balance changed: fetch it again so the fare shown is the one that will be charged
         if (status === 409 && code === 'POINTS_CHANGED') refreshUser();
@@ -358,10 +396,20 @@ export default function BookingPage() {
                 const state = step === n ? 'current' : step > n ? 'done' : 'todo';
                 return (
                   <li key={s} aria-current={state === 'current' ? 'step' : undefined}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                      state === 'current' ? 'bg-on-paint text-paint' : state === 'done' ? 'bg-on-paint/20' : 'border border-on-paint/30 opacity-75'
+                    className={`relative isolate flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-[color,background-color,opacity] duration-300 ease-out ${
+                      state === 'current' ? 'text-paint' : state === 'done' ? 'bg-on-paint/20' : 'border border-on-paint/30 opacity-75'
                     }`}>
-                    {state === 'done' ? <Check className="h-4 w-4" /> : <span className="font-wide font-black">{n}</span>}
+                    {/* One on-paint marker that glides from step to step */}
+                    {state === 'current' && (
+                      <m.span
+                        layoutId="booking-step-marker"
+                        transition={SPRING}
+                        aria-hidden="true"
+                        className="absolute inset-0 -z-10 bg-on-paint"
+                        style={{ borderRadius: 999 }}
+                      />
+                    )}
+                    {state === 'done' ? <DrawnCheck className="h-4 w-4" delay={0.12} /> : <span className="font-wide font-black">{n}</span>}
                     {s}
                   </li>
                 );
@@ -373,7 +421,8 @@ export default function BookingPage() {
 
       <div className="page-container grid gap-10 py-10 lg:grid-cols-12">
         <div ref={stepTop} className="min-w-0 scroll-mt-24 lg:col-span-8">
-          <div key={step} className="step-in">
+          <AnimatePresence custom={dir} mode="wait" initial={false} onExitComplete={afterStepSwap}>
+          <m.div key={step} custom={dir} variants={stepSwap} initial="initial" animate="animate" exit="exit">
           {step === 1 && (
             <div className="space-y-10">
               <fieldset>
@@ -411,12 +460,12 @@ export default function BookingPage() {
                   </label>
                   <div className="flex flex-col justify-start sm:pt-[26px]">
                     <p className="rounded-xl bg-ink/[0.05] px-4 py-3 text-sm">
-                      {totalDays > 0 ? <><strong>{totalDays}</strong> {totalDays === 1 ? 'day' : 'days'} · {rupees(baseAmount)}</> : <span className="text-muted">Pick your dates</span>}
+                      {totalDays > 0 ? <><strong>{totalDays}</strong> {totalDays === 1 ? 'day' : 'days'} · <GlideNumber value={baseAmount} format={rupees} /></> : <span className="text-muted">Pick your dates</span>}
                     </p>
                   </div>
                   <div aria-live="polite" className="sm:col-span-3">
                     {clash && !errors.pickupDate && (
-                      <p className="text-sm font-semibold text-warn">
+                      <p className={`text-sm font-semibold text-warn ${NOTE_IN}`}>
                         These dates overlap a booking from {formatDay(clash.from, SHORT_DAY)} to {formatDay(clash.to, SHORT_DAY)}.
                       </p>
                     )}
@@ -440,24 +489,24 @@ export default function BookingPage() {
               <fieldset>
                 <legend className="font-wide font-black uppercase tracking-tight text-xl">How you will pay</legend>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Payment method">
-                  {PAYMENT_METHODS.map((m) => {
-                    const on = form.paymentMethod === m.id;
+                  {PAYMENT_METHODS.map((pm) => {
+                    const on = form.paymentMethod === pm.id;
                     return (
                       <button
-                        key={m.id}
+                        key={pm.id}
                         type="button"
                         role="radio"
                         aria-checked={on}
-                        onClick={() => setForm((p) => ({ ...p, paymentMethod: m.id }))}
-                        className={`rounded-chip border p-5 text-left transition-colors ${on ? 'border-ink ring-1 ring-ink' : 'border-line hover:border-ink'}`}
+                        onClick={() => setForm((p) => ({ ...p, paymentMethod: pm.id }))}
+                        className={`rounded-chip border p-5 text-left transition-[border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.98] ${on ? 'border-ink ring-1 ring-ink' : 'border-line hover:border-ink'}`}
                       >
                         <span className="flex items-center justify-between gap-3">
-                          <span className="font-semibold">{m.label}</span>
-                          <span className={`grid h-5 w-5 place-items-center rounded-full border-2 ${on ? 'border-ink' : 'border-line'}`}>
-                            {on && <span className="h-2.5 w-2.5 rounded-full bg-ink" />}
+                          <span className="font-semibold">{pm.label}</span>
+                          <span className={`grid h-5 w-5 place-items-center rounded-full border-2 transition-colors duration-200 ${on ? 'border-ink' : 'border-line'}`}>
+                            {on && <span className="h-2.5 w-2.5 rounded-full bg-ink animate-[dot-in_220ms_var(--ease-out)_backwards]" />}
                           </span>
                         </span>
-                        <span className="mt-1.5 block text-sm text-muted">{m.sublabel}</span>
+                        <span className="mt-1.5 block text-sm text-muted">{pm.sublabel}</span>
                       </button>
                     );
                   })}
@@ -487,17 +536,17 @@ export default function BookingPage() {
                     {errors.discountCode ? (
                       <FieldError id={errorId('discountCode')}>{errors.discountCode}</FieldError>
                     ) : discountInfo ? (
-                      <p className="mt-2 text-sm text-ok">
+                      <p key="promo-applied" className={`mt-2 text-sm text-ok ${NOTE_IN}`}>
                         {discountInfo.percentageOff}% off applied{discountInfo.maxDiscount ? `, up to ${rupees(discountInfo.maxDiscount)}` : ''}.
                         {discountInfo.expiresAt && ` Valid until ${formatDay(discountInfo.expiresAt)}.`}
                         {promoMin > 0 && !promoActive && <span className="block text-warn">Needs a rental of at least {rupees(promoMin)}.</span>}
                       </p>
                     ) : (
-                      <p className="mt-2 text-xs text-muted">Try DRIVEAWAY20, NEWUSER10 or AHMEDABAD15.</p>
+                      <p key="promo-hint" className="mt-2 text-xs text-muted">Try DRIVEAWAY20, NEWUSER10 or AHMEDABAD15.</p>
                     )}
                   </div>
                   {points > 0 && (
-                    <label className={`flex cursor-pointer items-start gap-3 rounded-chip border p-4 ${form.useLoyaltyPoints ? 'border-ink' : 'border-line'}`}>
+                    <label className={`flex cursor-pointer items-start gap-3 rounded-chip border p-4 transition-colors duration-200 ${form.useLoyaltyPoints ? 'border-ink' : 'border-line'}`}>
                       <input
                         type="checkbox"
                         checked={form.useLoyaltyPoints}
@@ -513,7 +562,7 @@ export default function BookingPage() {
                 </div>
               </fieldset>
 
-              <Button onClick={() => validateStep1() && setStep(2)} className="w-full !py-4 text-base sm:w-auto sm:!px-10">
+              <Button onClick={() => validateStep1() && goToStep(2)} className="w-full !py-4 text-base sm:w-auto sm:!px-10">
                 Continue to driver details <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -528,8 +577,8 @@ export default function BookingPage() {
               errorId={errorId}
               accountEmail={user?.email}
               dobMax={dobMax}
-              onBack={() => setStep(1)}
-              onNext={() => validateStep2() && setStep(3)}
+              onBack={() => goToStep(1)}
+              onNext={() => validateStep2() && goToStep(3)}
             />
           )}
 
@@ -557,13 +606,13 @@ export default function BookingPage() {
                 Loyalty points are added when the trip is completed: about <strong className="text-ink">{Math.floor(fare.totalAmount / 100).toLocaleString('en-IN')} points</strong> for this booking. Your invoice is ready as soon as you confirm.
               </p>
               {submitError && (
-                <div role="alert" className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger dark:text-[#F28B82]">
+                <div role="alert" key={submitError.message} className={`rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger dark:text-[#F28B82] ${NOTE_IN}`}>
                   <p className="font-semibold">{submitError.message}</p>
                   {submitError.status === 429 && <Link to="/dashboard" className="mt-1 inline-block underline">Open My bookings</Link>}
                 </div>
               )}
               <div className="flex flex-wrap gap-3">
-                <Button variant="secondary" onClick={() => setStep(2)} disabled={submitting || Boolean(created)}><ChevronLeft className="h-4 w-4" /> Back</Button>
+                <Button variant="secondary" onClick={() => goToStep(2)} disabled={submitting || Boolean(created)}><ChevronLeft className="h-4 w-4" /> Back</Button>
                 <Button variant="paint" onClick={handleSubmit} loading={submitting} disabled={Boolean(created)} className="!px-8 !py-4 text-base">
                   {confirmLabel}
                   <ChevronRight className="h-4 w-4" />
@@ -571,7 +620,8 @@ export default function BookingPage() {
               </div>
             </div>
           )}
-          </div>
+          </m.div>
+          </AnimatePresence>
         </div>
 
         {/* Fare sheet */}
@@ -581,18 +631,36 @@ export default function BookingPage() {
               <img src={sizedImage(car.images?.main, 640)} alt="" decoding="async" onError={(e) => handleImageError(e, 640)} className="h-full w-full object-cover" />
               <span className="lacquer absolute left-3 top-3 rounded-lg px-2.5 py-1.5 code-label text-[11px]">Paint {paint.no} · {car.type}</span>
             </div>
-            <dl className="space-y-2.5 p-5 text-sm">
+            {/* layoutRoot: the lines glide relative to this list, so when the whole sheet moves (on
+                phones it sits under the step, which grows when an error appears) nothing slides inside it.
+                A flex gap rather than space-y: a line leaving is lifted out of the flow (popLayout),
+                and a margin would knock it out of place while it fades. */}
+            <m.dl layoutRoot className="relative flex flex-col gap-2.5 p-5 text-sm">
               <div className="flex justify-between"><dt className="text-muted">Daily rate</dt><dd className="font-semibold">{rupees(car.dailyRate)}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted">Days</dt><dd className="font-semibold">{totalDays || '–'}</dd></div>
-              {totalDays > 0 && <div className="flex justify-between"><dt className="text-muted">Rental</dt><dd className="font-semibold">{rupees(baseAmount)}</dd></div>}
-              {fare.discountAmount > 0 && <div className="flex justify-between text-ok"><dt>Promo {discountInfo?.percentageOff}%</dt><dd>-{rupees(Math.round(fare.discountAmount))}</dd></div>}
-              {fare.loyaltyDiscount > 0 && <div className="flex justify-between text-ok"><dt>Loyalty points</dt><dd>-{rupees(Math.round(fare.loyaltyDiscount))}</dd></div>}
-              <div className="flex items-end justify-between border-t border-line pt-4">
+              <div className="flex justify-between"><dt className="text-muted">Days</dt><dd className="font-semibold">{totalDays ? <GlideNumber value={totalDays} /> : '–'}</dd></div>
+              <AnimatePresence initial={false} mode="popLayout">
+                {totalDays > 0 && (
+                  <m.div key="rental" layout="position" transition={FARE_GLIDE} variants={fareLine} initial="initial" animate="animate" exit="exit" className="flex justify-between">
+                    <dt className="text-muted">Rental</dt><dd className="font-semibold"><GlideNumber value={baseAmount} format={rupees} /></dd>
+                  </m.div>
+                )}
+                {fare.discountAmount > 0 && (
+                  <m.div key="promo" layout="position" transition={FARE_GLIDE} variants={fareLine} initial="initial" animate="animate" exit="exit" className="flex justify-between text-ok">
+                    <dt>Promo {discountInfo?.percentageOff}%</dt><dd>-<GlideNumber value={Math.round(fare.discountAmount)} format={rupees} /></dd>
+                  </m.div>
+                )}
+                {fare.loyaltyDiscount > 0 && (
+                  <m.div key="points" layout="position" transition={FARE_GLIDE} variants={fareLine} initial="initial" animate="animate" exit="exit" className="flex justify-between text-ok">
+                    <dt>Loyalty points</dt><dd>-<GlideNumber value={Math.round(fare.loyaltyDiscount)} format={rupees} /></dd>
+                  </m.div>
+                )}
+              </AnimatePresence>
+              <m.div layout="position" transition={FARE_GLIDE} className="flex items-end justify-between border-t border-line pt-4">
                 <dt className="font-semibold">Estimated total</dt>
-                <dd key={fare.totalAmount} className="enter-pop origin-right font-wide font-black text-3xl">{totalDays > 0 ? rupees(fare.totalAmount) : '–'}</dd>
-              </div>
-              <p className="text-xs text-muted">Taxes included. The final amount is confirmed when you book. Free cancellation before your pickup day.</p>
-            </dl>
+                <dd className="font-wide font-black text-3xl">{totalDays > 0 ? <GlideNumber value={fare.totalAmount} format={rupees} /> : '–'}</dd>
+              </m.div>
+              <m.p layout="position" transition={FARE_GLIDE} className="text-xs text-muted">Taxes included. The final amount is confirmed when you book. Free cancellation before your pickup day.</m.p>
+            </m.dl>
           </div>
         </aside>
       </div>

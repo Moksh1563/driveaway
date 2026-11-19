@@ -5,6 +5,7 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ScrollToTop from './components/layout/ScrollToTop';
 import ServerWakeBanner from './components/layout/ServerWakeBanner';
+import usePageSettle from './components/layout/usePageSettle';
 import HomePage from './pages/HomePage';
 import { RouteSkeleton } from './components/ui/Skeletons';
 import { pageTitle } from './hooks/usePageTitle';
@@ -106,6 +107,11 @@ export default function App() {
     return () => clearTimeout(t);
   }, [location.pathname]);
 
+  // Each new page settles in. Keyed on the path only, so fleet filters (search params) don't replay
+  // it; the admin panel keeps its sidebar still and settles its own content (AdminLayout).
+  const mainRef = useRef(null);
+  usePageSettle(mainRef, isAdminRoute ? '/admin' : location.pathname);
+
   return (
     <div className="min-h-screen flex flex-col bg-ground text-ink dark:bg-ground ">
       <a
@@ -118,7 +124,7 @@ export default function App() {
       <ScrollToTop />
       <ServerWakeBanner />
       {!isAdminRoute && <Navbar />}
-      <main id="main" className="flex-grow">
+      <main id="main" ref={mainRef} className="flex-grow">
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<HomePage />} />

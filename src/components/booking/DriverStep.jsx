@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import Button from '../ui/Button';
-import FieldError from './FieldError';
+import FieldError, { ERROR_IN } from './FieldError';
 import { FIELD_CLASS, OPTIONAL_DRIVER_FIELDS } from './driverFields';
+
+// Opening the fold: its fields drop 6px into place as they fade in
+const FOLD_IN = 'group-open:animate-[rise_260ms_var(--ease-out)_backwards] [--rise:-6px]';
 
 /**
  * Step 2 of booking: the three required driver fields up front, everything else folded into
@@ -36,14 +39,15 @@ export default function DriverStep({ form, set, errors, field, errorId, accountE
           <span>
             More details (optional)
             {optionalError ? (
-              <span className="ml-2 text-sm font-semibold text-danger dark:text-[#F28B82]">Check the marked fields</span>
+              <span className={`ml-2 text-sm font-semibold text-danger dark:text-[#F28B82] ${ERROR_IN}`}>Check the marked fields</span>
             ) : prefilled > 0 && (
               <span className="ml-2 text-sm font-normal text-muted">{prefilled} filled in from your profile</span>
             )}
           </span>
-          <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+          <ChevronDown className="h-4 w-4 transition-transform duration-300 ease-out group-open:rotate-180" aria-hidden="true" />
         </summary>
-        <div className="grid gap-4 border-t border-line p-5 sm:grid-cols-2">
+        {/* The fold's fields settle in as it opens (CSS on [open], so it also plays when validation opens it) */}
+        <div className={`grid gap-4 border-t border-line p-5 sm:grid-cols-2 ${FOLD_IN}`}>
           <div className="sm:col-span-2">
             {input('customerEmail', 'Contact email', { input: { type: 'email', autoComplete: 'email' } })}
             {accountEmail && <p className="mt-1.5 text-xs text-muted">Confirmations and invoices always go to your account email, {accountEmail}.</p>}
