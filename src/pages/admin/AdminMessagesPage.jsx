@@ -1,9 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { AnimatePresence, m } from 'framer-motion';
 import { Mail, Phone, CheckCheck, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { TableSkeleton } from '../../components/ui/Skeletons';
 import LoadError from '../../components/admin/LoadError';
+import { EASE, listItem, SPRING } from '../../theme/motion';
+
+// Inbox list: switching All / Unread / Read, messages that leave fade out on top while the rest
+// glide into place (popLayout), and messages that join fade in.
+const ITEM_TRANSITION = { layout: { duration: 0.3, ease: EASE.out } };
+// Reading pane: the newly chosen message (or the placeholder) cross-fades over the last one
+const paneSwap = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE.out } },
+  exit: { opacity: 0, transition: { duration: 0.14, ease: EASE.in } },
+};
+// Loading → inbox: the loaded view fades in over where the skeleton was
+const viewIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.2, ease: EASE.out } } };
 
 // Visitor-typed values go into mailto:/tel: links encoded, so a crafted subject or address cannot add cc/bcc/body
 const mailtoAddress = (email) => encodeURIComponent(String(email || '').trim()).replace(/%40/g, '@');
@@ -37,7 +51,7 @@ export default function AdminMessagesPage() {
   const markRead = async (id) => {
     try {
       const { data } = await api.patch(`/admin/messages/${id}/read`);
-      setMessages(prev => prev.map(m => m._id === id ? data : m));
+      setMessages(prev => prev.map(msg => msg._id === id ? data : msg));
       if (selected?._id === id) setSelected(data);
     } catch { toast.error('Failed to mark as read'); }
   };
@@ -47,13 +61,13 @@ export default function AdminMessagesPage() {
     if (!msg.isRead) markRead(msg._id);
   };
 
-  const filtered = messages.filter(m => {
-    if (filter === 'unread') return !m.isRead;
-    if (filter === 'read') return m.isRead;
+  const filtered = messages.filter(msg => {
+    if (filter === 'unread') return !msg.isRead;
+    if (filter === 'read') return msg.isRead;
     return true;
   });
 
-  const unreadCount = messages.filter(m => !m.isRead).length;
+  const unreadCount = messages.filter(msg => !msg.isRead).length;
 
   return (
     <div className="space-y-6">
@@ -74,31 +88,40 @@ export default function AdminMessagesPage() {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
+            className={`relative px-4 py-2 rounded-xl text-xs font-bold border bg-raised transition-[color,background-color,border-color,opacity,box-shadow,transform] duration-200 ease-out active:scale-[0.98] ${
  filter === f.key
- ? 'bg-ink border-ink text-ground shadow-sm'
- : 'bg-raised border-line text-muted hover:border-ink'
+ ? 'border-ink text-ground shadow-sm'
+ : 'border-line text-muted hover:border-ink'
  }`}
           >
-            {f.label}
+            {/* The ink fill slides to the chosen tab, like a segmented control */}
+            {filter === f.key && (
+              <m.span layoutId="admin-inbox-filter" transition={SPRING} className="absolute inset-0 rounded-[11px] bg-ink" aria-hidden="true" />
+            )}
+            <span className="relative">{f.label}</span>
           </button>
         ))}
       </div>
 
       {loading ? <TableSkeleton cols={4} /> : error ? <LoadError message={error} onRetry={fetchMessages} /> : (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[500px]">
+        <m.div {...viewIn} className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[500px]">
           {/* Message list */}
-          <div className="lg:col-span-2 space-y-2.5">
+          <div className="relative lg:col-span-2 flex flex-col gap-2.5">
+            <AnimatePresence mode="popLayout" initial={false}>
             {filtered.length === 0 ? (
-              <div className="bg-surface border border-line rounded-chip p-8 text-center shadow-sm">
+              <m.div key="empty" {...listItem} className="bg-surface border border-line rounded-chip p-8 text-center shadow-sm">
                 <Inbox className="w-10 h-10 text-muted mx-auto mb-3" />
                 <p className="text-muted text-sm font-medium">No messages found</p>
-              </div>
+              </m.div>
             ) : filtered.map(msg => (
-              <button
+              <m.button
                 key={msg._id}
+                layout="position"
+                {...listItem}
+                transition={ITEM_TRANSITION}
                 onClick={() => handleSelect(msg)}
-                className={`w-full text-left p-4 rounded-chip border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
+                // No opacity/transform in the CSS transition: Framer moves this card, CSS only recolours it
+                className={`w-full text-left p-4 rounded-chip border transition-[color,background-color,border-color,box-shadow] ${
  selected?._id === msg._id
  ? 'bg-ink/10 border-ink/40 shadow-sm'
  : 'bg-surface border-line hover:border-ink/50'
@@ -120,14 +143,16 @@ export default function AdminMessagesPage() {
                     <CheckCheck className="w-3 h-3" /> Read
                   </span>
                 )}
-              </button>
+              </m.button>
             ))}
+            </AnimatePresence>
           </div>
 
           {/* Message detail */}
-          <div className="lg:col-span-3">
+          <div className="relative lg:col-span-3">
+            <AnimatePresence mode="popLayout" initial={false}>
             {selected ? (
-              <div className="bg-surface border border-line rounded-chip p-6 sm:p-7 h-full shadow-sm flex flex-col justify-between">
+              <m.div key={selected._id} {...paneSwap} className="bg-surface border border-line rounded-chip p-6 sm:p-7 h-full shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="border-b border-line pb-4 mb-5">
                     <h2 className="text-ink font-extrabold text-xl mb-2">{selected.subject || 'Inquiry without Subject'}</h2>
@@ -162,17 +187,18 @@ export default function AdminMessagesPage() {
                     <Mail className="w-4 h-4" /> Reply via Email
                   </a>
                 </div>
-              </div>
+              </m.div>
             ) : (
-              <div className="bg-surface border border-line rounded-chip h-full flex items-center justify-center p-12 shadow-sm min-h-[300px]">
+              <m.div key="none" {...paneSwap} className="bg-surface border border-line rounded-chip h-full flex items-center justify-center p-12 shadow-sm min-h-[300px]">
                 <div className="text-center">
                   <Mail className="w-12 h-12 text-muted mx-auto mb-3" />
                   <p className="text-muted font-semibold text-sm">Select a message on the left to read full details</p>
                 </div>
-              </div>
+              </m.div>
             )}
+            </AnimatePresence>
           </div>
-        </div>
+        </m.div>
       )}
     </div>
   );

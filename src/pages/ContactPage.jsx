@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, Clock, ArrowRight, Check } from 'lucide-react';
 import api from '../api/axios';
 import Button from '../components/ui/Button';
+import Reveal from '../components/ui/Reveal';
+import { ERROR_IN } from '../components/account/formFeedback';
 import { paintStyle } from '../theme/paints';
+
+// "Message sent" comes into focus (blur to sharp); a failure fades in quickly like the auth errors.
+// Both are CSS, so the message is visible even before (or without) the Framer chunk.
+const SENT_IN = 'animate-[focus-in_600ms_var(--ease-out)_backwards] [--rise:6px]';
 
 const DETAILS = [
   { icon: MapPin, title: 'Headquarters', lines: ['Shop No. 12, SG Highway', 'Bodakdev, Ahmedabad, Gujarat 380054'] },
@@ -38,15 +44,16 @@ export default function ContactPage() {
 
   return (
     <div className="pt-[72px]">
+      {/* The painted head comes into focus; the contact details follow one by one */}
       <section style={paintStyle('Luxury')} className="lacquer on-paint">
         <div className="page-container grid gap-10 py-16 lg:grid-cols-12 lg:py-24">
           <div className="lg:col-span-6">
-            <h1 className="display text-[clamp(2.8rem,6.5vw,6rem)]">Talk to us.</h1>
-            <p className="mt-6 max-w-md text-lg leading-snug">
+            <h1 className="focus-in display text-[clamp(2.8rem,6.5vw,6rem)]">Talk to us.</h1>
+            <p className="focus-in mt-6 max-w-md text-lg leading-snug" style={{ '--d': '140ms', '--rise': '10px' }}>
               Questions about a car, a booking, a wedding convoy or a partnership. A person in Ahmedabad will reply.
             </p>
           </div>
-          <dl className="grid gap-6 sm:grid-cols-2 lg:col-span-6 lg:pt-3">
+          <Reveal as="dl" delay={260} stagger={70} className="grid gap-6 sm:grid-cols-2 lg:col-span-6 lg:pt-3">
             {DETAILS.map(({ icon: Icon, title, lines, href }) => (
               <div key={title} className="border-t border-on-paint/30 pt-4">
                 <dt className="flex items-center gap-2 code-label text-[12px]"><Icon className="h-4 w-4" /> {title}</dt>
@@ -56,54 +63,57 @@ export default function ContactPage() {
                 </dd>
               </div>
             ))}
-          </dl>
+          </Reveal>
         </div>
       </section>
 
       <section className="page-container py-16 lg:py-20">
         <div className="grid gap-12 lg:grid-cols-12">
-          <div className="lg:col-span-4">
+          <Reveal variant="focus" stagger={90} className="lg:col-span-4">
             <h2 className="font-wide font-black uppercase tracking-tight text-2xl">Send a message</h2>
             <p className="mt-3 text-muted">
               Fields marked * are required. Your message goes to the Driveaway team only; the{' '}
               <Link to="/privacy" className="underline hover:text-ink">privacy page</Link> says how it is kept.
             </p>
-          </div>
+          </Reveal>
 
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:col-span-8">
-            <label className="block">
-              <span className="field-label">Your name *</span>
-              <input required value={form.name} onChange={set('name')} autoComplete="name" className="field" />
-            </label>
-            <label className="block">
-              <span className="field-label">Email *</span>
-              <input type="email" required value={form.email} onChange={set('email')} autoComplete="email" className="field" />
-            </label>
-            <label className="block">
-              <span className="field-label">Phone</span>
-              <input type="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" className="field" />
-            </label>
-            <label className="block">
-              <span className="field-label">Subject</span>
-              <input value={form.subject} onChange={set('subject')} placeholder="Booking question" className="field" />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="field-label">Message *</span>
-              <textarea required value={form.message} onChange={set('message')} rows={6} maxLength={3000} className="field resize-y" />
-            </label>
+          {/* The form rises in as one piece, just after its heading */}
+          <Reveal delay={150} className="lg:col-span-8">
+            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="field-label">Your name *</span>
+                <input required value={form.name} onChange={set('name')} autoComplete="name" className="field" />
+              </label>
+              <label className="block">
+                <span className="field-label">Email *</span>
+                <input type="email" required value={form.email} onChange={set('email')} autoComplete="email" className="field" />
+              </label>
+              <label className="block">
+                <span className="field-label">Phone</span>
+                <input type="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" className="field" />
+              </label>
+              <label className="block">
+                <span className="field-label">Subject</span>
+                <input value={form.subject} onChange={set('subject')} placeholder="Booking question" className="field" />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="field-label">Message *</span>
+                <textarea required value={form.message} onChange={set('message')} rows={6} maxLength={3000} className="field resize-y" />
+              </label>
 
-            {status && (
-              <p role={status.ok ? 'status' : 'alert'} className={`sm:col-span-2 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${status.ok ? 'bg-ok/10 text-ok' : 'bg-danger/10 text-danger'}`}>
-                {status.ok && <Check className="h-4 w-4" />} {status.text}
-              </p>
-            )}
+              {status && (
+                <p key={status.text} role={status.ok ? 'status' : 'alert'} className={`sm:col-span-2 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${status.ok ? `bg-ok/10 text-ok ${SENT_IN}` : `bg-danger/10 text-danger ${ERROR_IN}`}`}>
+                  {status.ok && <Check className="h-4 w-4" />} {status.text}
+                </p>
+              )}
 
-            <div className="sm:col-span-2">
-              <Button type="submit" loading={loading} className="!px-8 !py-4 text-base">
-                Send message <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </form>
+              <div className="sm:col-span-2">
+                <Button type="submit" loading={loading} className="!px-8 !py-4 text-base">
+                  Send message <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </form>
+          </Reveal>
         </div>
       </section>
     </div>

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { m } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Send, Plus, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import Button from '../ui/Button';
 import { panelMotion } from '../../theme/motion';
+import { ERROR_IN } from '../booking/FieldError';
 import { todayIST, endOfDayIST, readBroadcastResult, broadcastSummary } from './discountRules';
 
 const EMPTY_FORM = {
@@ -100,11 +101,15 @@ export default function CreateDiscountForm({ onCreated, onRefresh, onCancel }) {
     'aria-invalid': errors[key] ? true : undefined,
     'aria-describedby': [errors[key] ? `discount-${key}-error` : '', `discount-${key}-hint`].filter(Boolean).join(' ') || undefined,
   });
-  const fieldError = (key) => (errors[key] ? <p id={`discount-${key}-error`} className="mt-1 text-xs font-semibold text-danger">{errors[key]}</p> : null);
+  const fieldError = (key) => (errors[key] ? <p key={errors[key]} id={`discount-${key}-error`} className={`mt-1 text-xs font-semibold text-danger ${ERROR_IN}`}>{errors[key]}</p> : null);
+  // A field's error drops in under it (CSS ERROR_IN, visible by default); a new message replays it
   const hint = (key, text) => <p id={`discount-${key}-hint`} className="mt-1 text-[11px] text-muted">{text}</p>;
 
+  // The panel opens in place under the page header (panelMotion) and the list below glides to make
+  // room. `layout="position"` never moves the panel itself; it tells the list (same LayoutGroup on the
+  // page) to glide whenever the panel grows or shrinks, e.g. when the message field opens.
   return (
-    <m.div {...panelMotion} className="bg-surface border border-line rounded-chip p-6 shadow-sm overflow-hidden">
+    <m.div {...panelMotion} layout="position" className="bg-surface border border-line rounded-chip p-6 shadow-sm overflow-hidden">
       <h2 className="text-lg font-bold text-ink mb-4 flex items-center gap-2">
         <Sparkles className="w-5 h-5 text-ink" aria-hidden="true" />
         Create & Broadcast New Discount Code
@@ -250,8 +255,10 @@ export default function CreateDiscountForm({ onCreated, onRefresh, onCancel }) {
             </span>
           </label>
 
+          {/* Ticking the box opens the message field in place; unticking closes it, faster */}
+          <AnimatePresence initial={false}>
           {form.notifyUsers && (
-            <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <m.div key="custom-message" {...panelMotion}>
               <label htmlFor="discount-customMessage" className="block text-xs font-bold text-muted mb-1 uppercase tracking-wider">
                 Custom Email Announcement Message (Optional)
               </label>
@@ -266,6 +273,7 @@ export default function CreateDiscountForm({ onCreated, onRefresh, onCancel }) {
               />
             </m.div>
           )}
+          </AnimatePresence>
         </div>
 
         <div className="flex justify-end gap-3 pt-2">

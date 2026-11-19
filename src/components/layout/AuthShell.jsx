@@ -2,18 +2,22 @@ import React from 'react';
 import { Check } from 'lucide-react';
 import { PAINTS, PAINT_ORDER, paintStyle } from '../../theme/paints';
 import { PASSWORD_RULES } from '../../hooks/useFieldErrors';
+import RisingWords from '../ui/RisingWords';
 
 /**
  * Split layout for sign-in and sign-up: a lacquered paint panel beside the form.
  * The paint panel carries the page's single headline; the form side stays neutral.
+ * The form is the task, so it carries no entrance of its own (the page settle is enough) and is
+ * sharp and ready at once, while the panel's headline words rise from their masks and the paint
+ * chips are dealt onto its floor.
  */
 export default function AuthShell({ paint = 'Supercar', title, lead, children }) {
   return (
     <div className="grid min-h-screen pt-[72px] lg:grid-cols-2">
       <section style={paintStyle(paint)} className="lacquer on-paint relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between">
         <div className="px-12 pt-16 xl:px-16">
-          <h1 className="display text-[clamp(3rem,5.6vw,5.5rem)]">{title}</h1>
-          <p className="mt-6 max-w-sm text-lg leading-snug">{lead}</p>
+          <h1 className="display text-[clamp(3rem,5.6vw,5.5rem)]"><RisingWords text={title} /></h1>
+          <p className="focus-in mt-6 max-w-sm text-lg leading-snug" style={{ '--d': '260ms', '--rise': '10px' }}>{lead}</p>
         </div>
         {/* The paint book, standing on the panel's floor */}
         <div className="flex items-end gap-2 px-12 xl:px-16" aria-hidden="true">
@@ -37,15 +41,15 @@ export default function AuthShell({ paint = 'Supercar', title, lead, children })
   );
 }
 
-/** The live password checklist shared by sign-up and password reset. */
+/** The live password checklist shared by sign-up and password reset: each tick firms up as its rule is met. */
 export function PasswordChecklist({ password }) {
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Password requirements">
       {PASSWORD_RULES.map((r) => {
         const ok = r.test(password || '');
         return (
-          <li key={r.label} className={`flex items-center gap-1.5 ${ok ? 'text-ok' : 'text-muted'}`}>
-            <Check className={`h-3.5 w-3.5 ${ok ? '' : 'opacity-30'}`} /> {r.label}
+          <li key={r.label} className={`flex items-center gap-1.5 transition-colors duration-200 ${ok ? 'text-ok' : 'text-muted'}`}>
+            <Check className={`h-3.5 w-3.5 transition-[opacity,transform] duration-200 ease-out ${ok ? '' : 'scale-75 opacity-30'}`} /> {r.label}
           </li>
         );
       })}

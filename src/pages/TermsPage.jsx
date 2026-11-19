@@ -4,6 +4,9 @@ import { ArrowRight, FlaskConical } from 'lucide-react';
 
 const UPDATED = '19 November 2026';
 
+// A reading page stays calm: the page settles in once on arrival and every topic is simply there,
+// so jumping or searching never lands on a section that is still waiting to appear
+
 /** One topic: heading on the left, plain-words body on the right (stacked on phones). */
 function Section({ title, children }) {
   return (

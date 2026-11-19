@@ -82,7 +82,8 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
       initialFocusRef={successMsg ? undefined : emailRef}
     >
       {car && (successMsg ? (
-        <div className="text-center py-2 space-y-4" role="status">
+        // The confirmation comes into focus in place of the form
+        <div className="text-center py-2 space-y-4 focus-in" style={{ '--rise': '10px' }} role="status">
           <div className="w-16 h-16 bg-ok/10 text-ok rounded-full flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-9 h-9" aria-hidden="true" />
           </div>
@@ -122,7 +123,7 @@ export default function NotifyAvailabilityModal({ car, isOpen, onClose }) {
           </div>
 
           {errorMsg && (
-            <p id={errorId} role="alert" className="flex items-center gap-2 p-3 bg-danger/10 text-danger text-sm rounded-xl">
+            <p id={errorId} role="alert" className="step-in flex items-center gap-2 p-3 bg-danger/10 text-danger text-sm rounded-xl">
               <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
               <span>{errorMsg}</span>
             </p>

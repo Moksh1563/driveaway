@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, m } from 'framer-motion';
 import { Plus, Edit2, Trash2, Search, X, Upload, Image as ImageIcon, Loader2, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
@@ -9,6 +10,21 @@ import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import LoadError from '../../components/admin/LoadError';
 import { sizedImage, handleImageError } from '../../utils/image';
 import { TableSkeleton } from '../../components/ui/Skeletons';
+import { EASE, listItem } from '../../theme/motion';
+import useDebounced from '../../hooks/useDebounced';
+import { ERROR_IN } from '../../components/booking/FieldError';
+
+// Search filters the fleet quietly: the query settles first (debounced), rows that drop out leave at
+// once, the rest glide up together a single time, and rows that match again fade in. Only a deleted
+// car fades away (AnimatePresence hands each leaving row the deleted id as `custom`). Reduced
+// motion: instant.
+const ROW_TRANSITION = { layout: { duration: 0.3, ease: EASE.out } };
+const DROP_AT_ONCE = { opacity: 0, transition: { duration: 0 } };
+const rowExit = (id) => (deletedId) => (deletedId === id ? listItem.exit : DROP_AT_ONCE);
+// Skeleton → table: the loaded fleet fades in where the skeleton was (once; searches don't replay it)
+const viewIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.2, ease: EASE.out } } };
+// Row icon buttons: border and colour answer hover, the button gives a little under the press
+const iconPress = 'transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.96]';
 
 const TYPES = ['Hypercar', 'Supercar', 'Sports', 'Luxury', 'SUV', 'Sedan', 'Electric', 'Hatchback'];
 const FUELS = ['Petrol', 'Diesel', 'Electric', 'Hybrid'];
@@ -89,6 +105,9 @@ export default function AdminCarsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [uploadingSlot, setUploadingSlot] = useState(null);
+  // The car just deleted (so only its row fades out) and a count of finished row exits (see rowsKey)
+  const [deletedId, setDeletedId] = useState(null);
+  const [exitsDone, setExitsDone] = useState(0);
   const requestRef = useRef(null);
 
   const fetchCars = useCallback(async () => {
@@ -162,6 +181,7 @@ export default function AdminCarsPage() {
     try {
       await api.delete(`/cars/${currentCar._id}`);
       toast.success('Car deleted successfully');
+      setDeletedId(currentCar._id);
       setCars(prev => prev.filter(c => c._id !== currentCar._id));
       setModal(null);
       fetchCars();
@@ -169,11 +189,14 @@ export default function AdminCarsPage() {
     finally { setDeleting(false); }
   };
 
-  const q = search.trim().toLowerCase();
+  const q = useDebounced(search.trim().toLowerCase());
   const filtered = cars.filter(c =>
     (c.name || '').toLowerCase().includes(q) ||
     (c.company || '').toLowerCase().includes(q)
   );
+  // Rows measure their layout only when this changes: the visible rows, or a leaving row finally
+  // gone (exitsDone ticks in the same render that removes it, so the rest glide up once)
+  const rowsKey = `${filtered.map(c => c._id).join('|')}#${exitsDone}`;
 
   const setField = (key, val) => {
     setCurrentCar(p => ({ ...p, [key]: val }));
@@ -220,7 +243,7 @@ export default function AdminCarsPage() {
     'aria-invalid': errors[key] ? true : undefined,
     'aria-describedby': errors[key] ? `car-${key}-error` : undefined,
   });
-  const fieldError = (key) => (errors[key] ? <p id={`car-${key}-error`} className="mt-1 text-xs font-semibold text-danger">{errors[key]}</p> : null);
+  const fieldError = (key) => (errors[key] ? <p key={errors[key]} id={`car-${key}-error`} className={`mt-1 text-xs font-semibold text-danger ${ERROR_IN}`}>{errors[key]}</p> : null);
 
   return (
     <div className="space-y-6">
@@ -249,7 +272,7 @@ export default function AdminCarsPage() {
       {loading ? <TableSkeleton cols={6} /> : error && cars.length === 0 ? (
         <LoadError message={error} onRetry={() => { setLoading(true); fetchCars(); }} />
       ) : (
-        <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
+        <m.div {...viewIn} className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -263,8 +286,9 @@ export default function AdminCarsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
+                <AnimatePresence initial={false} custom={deletedId} onExitComplete={() => setExitsDone(n => n + 1)}>
                 {filtered.map(car => (
-                  <tr key={car._id} className="hover:bg-ink/5 transition-colors">
+                  <m.tr key={car._id} layout="position" layoutDependency={rowsKey} {...listItem} exit={rowExit(car._id)} transition={ROW_TRANSITION} className="hover:bg-ink/5 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <img src={sizedImage(car.images?.main, 160)} alt="" loading="lazy" decoding="async" onError={(e) => handleImageError(e, 160)} className="w-14 h-9 object-cover rounded-lg bg-ink/5 "/>
@@ -295,7 +319,7 @@ export default function AdminCarsPage() {
                           onClick={() => openEdit(car)}
                           aria-label={`Edit ${car.name}`}
                           title="Edit car"
-                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                          className={`hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink ${iconPress}`}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -304,21 +328,24 @@ export default function AdminCarsPage() {
                           onClick={() => openDelete(car)}
                           aria-label={`Delete ${car.name}`}
                           title="Delete car"
-                          className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 transition-colors"
+                          className={`hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 ${iconPress}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
-                  </tr>
+                  </m.tr>
                 ))}
+                </AnimatePresence>
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="p-8 text-center text-muted">{cars.length ? 'No cars match this search' : 'No cars yet. Add the first one.'}</td></tr>
+                  <m.tr initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2, ease: EASE.out } }}>
+                    <td colSpan={6} className="p-8 text-center text-muted">{cars.length ? 'No cars match this search' : 'No cars yet. Add the first one.'}</td>
+                  </m.tr>
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+        </m.div>
       )}
 
       {/* Add/Edit Modal */}

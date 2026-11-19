@@ -16,7 +16,11 @@ reducedMotion.addEventListener?.('change', applyReducedMotion)
 
 // Components use the small `m` element; the animation code itself loads in its own chunk after
 // first paint (strict: a full `motion` element anywhere would throw, so it can't creep back in)
-const loadMotionFeatures = () => import('./theme/motionFeatures').then((mod) => mod.default)
+const importMotionFeatures = () => import('./theme/motionFeatures').then((mod) => mod.default)
+// A failed fetch of that chunk (a flaky connection) is retried once after a moment: until it loads,
+// every `m` element sits at its `initial` state, which for most entrances means invisible
+const loadMotionFeatures = () =>
+  importMotionFeatures().catch(() => new Promise((resolve) => { setTimeout(resolve, 1200) }).then(importMotionFeatures))
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>

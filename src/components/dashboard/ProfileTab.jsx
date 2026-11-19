@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../ui/Button';
+import { ERROR_IN, useShake } from '../account/formFeedback';
 import { passwordOk } from '../../hooks/useFieldErrors';
 
 const PROFILE_FIELDS = {
@@ -25,6 +26,9 @@ export default function ProfileTab() {
   const [pwError, setPwError] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [pwFormRef, shake] = useShake();
+  // A refused password change shows its reason and gives the form a small shake
+  const failPassword = (message) => { setPwError(message); shake(); };
 
   // The saved session only keeps name and email; fill the rest once the full profile arrives,
   // without overwriting anything already typed
@@ -54,8 +58,8 @@ export default function ProfileTab() {
 
   const handlePasswordChange = async () => {
     setPwError('');
-    if (!pwForm.oldPassword) return setPwError('Enter your current password.');
-    if (!passwordOk(pwForm.newPassword)) return setPwError('The new password needs 8 to 128 characters, with a letter and a number.');
+    if (!pwForm.oldPassword) return failPassword('Enter your current password.');
+    if (!passwordOk(pwForm.newPassword)) return failPassword('The new password needs 8 to 128 characters, with a letter and a number.');
     setSavingPassword(true);
     try {
       const { data } = await api.put('/auth/password', pwForm);
@@ -64,7 +68,7 @@ export default function ProfileTab() {
       toast.success('Password changed');
       setPwForm({ oldPassword: '', newPassword: '' });
     } catch (err) {
-      setPwError(err.response?.data?.message || 'Failed to change password');
+      failPassword(err.response?.data?.message || 'Failed to change password');
     } finally {
       setSavingPassword(false);
     }
@@ -91,7 +95,7 @@ export default function ProfileTab() {
         <Button type="submit" loading={savingProfile} className="mt-6">Save details</Button>
       </form>
 
-      <form className="lg:col-span-5" onSubmit={(e) => { e.preventDefault(); handlePasswordChange(); }} noValidate>
+      <form ref={pwFormRef} className="lg:col-span-5" onSubmit={(e) => { e.preventDefault(); handlePasswordChange(); }} noValidate>
         <h2 className="font-wide font-black uppercase tracking-tight text-xl">Password</h2>
         <p className="mt-2 text-sm text-muted">At least 8 characters, with a letter and a number.</p>
         <div className="mt-6 space-y-4">
@@ -104,7 +108,7 @@ export default function ProfileTab() {
             <input type="password" autoComplete="new-password" value={pwForm.newPassword} onChange={(e) => setPwForm((p) => ({ ...p, newPassword: e.target.value }))} className="field" />
           </label>
         </div>
-        {pwError && <p role="alert" className="mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger dark:text-[#F28B82]">{pwError}</p>}
+        {pwError && <p key={pwError} role="alert" className={`mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger dark:text-[#F28B82] ${ERROR_IN}`}>{pwError}</p>}
         <Button type="submit" variant="secondary" loading={savingPassword} className="mt-6">Change password</Button>
       </form>
     </div>

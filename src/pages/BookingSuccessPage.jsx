@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { m } from 'framer-motion';
 import { Download, MessageCircle, ArrowRight, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
@@ -7,6 +8,8 @@ import { useAuth } from '../context/AuthContext';
 import { generatePDF, sendWhatsAppInvoice } from '../components/invoice/InvoiceGenerator';
 import PayBookingModal from '../components/booking/PayBookingModal';
 import Badge from '../components/ui/Badge';
+import CountUp from '../components/ui/CountUp';
+import { EASE } from '../theme/motion';
 import { carTitle, paintFor, paintStyle, rupees } from '../theme/paints';
 import { sizedImage, handleImageError } from '../utils/image';
 import { formatDay } from '../utils/dates';
@@ -16,6 +19,22 @@ import { SuccessSkeleton } from '../components/ui/Skeletons';
 
 const LONG_DAY = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
 const longDate = (d) => formatDay(d, LONG_DAY);
+
+// The .mask-line rise, per word: each word comes up from behind its own mask, so the lines rise
+// wherever the column happens to wrap them. align-top keeps the 0.9 line height; the padding and
+// matching negative margins widen the mask a hair so no glyph edge is trimmed.
+const WORD_MASK = 'inline-block overflow-hidden align-top px-[0.04em] -mx-[0.04em] pb-[0.08em] -mb-[0.08em]';
+const WORD_RISE = 'inline-block animate-[line-up_560ms_var(--ease-out)_backwards]';
+
+// One authored moment (the headline rising, then the stamp landing) and otherwise restraint: the
+// actions arrive together as one group just behind the lead, and the ticket's facts are there at once
+const ACTIONS_IN = { '--d': '400ms', '--rise': '12px' };
+
+// A cancelled car switches off (goes unlit, the same values as .unlit) just after its stamp lands
+const switchOff = {
+  initial: { filter: 'saturate(1) brightness(1)' },
+  animate: { filter: 'saturate(0.15) brightness(0.92)', transition: { duration: 0.7, delay: 0.75, ease: EASE.inOut } },
+};
 
 export default function BookingSuccessPage() {
   const { id } = useParams();
@@ -106,10 +125,21 @@ export default function BookingSuccessPage() {
           <div className="min-w-0 lg:col-span-6" style={{ containerType: 'inline-size' }}>
             {/* Sized so the longest word ("CANCELLED.") always fits its column */}
             <h1 className="display" style={{ fontSize: 'min(5.5rem, calc(100cqw / 9.2))' }}>
-              {headline}
+              <span className="sr-only">{headline}</span>
+              {/* Keyed on the words: paying from here swaps "reserved" for "the keys are yours" and it rises again */}
+              <span key={headline} aria-hidden="true">
+                {headline.split(' ').map((word, i) => (
+                  <React.Fragment key={`${i}-${word}`}>
+                    {i > 0 && ' '}
+                    <span className={WORD_MASK}>
+                      <span className={WORD_RISE} style={{ animationDelay: `${80 + i * 70}ms` }}>{word}</span>
+                    </span>
+                  </React.Fragment>
+                ))}
+              </span>
             </h1>
-            <p className="mt-6 max-w-md text-lg leading-snug">{lead}</p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <p key={lead} className="focus-in mt-6 max-w-md text-lg leading-snug" style={{ '--d': '300ms', '--rise': '10px' }}>{lead}</p>
+            <div className="enter mt-8 flex flex-wrap gap-3" style={ACTIONS_IN}>
               {payable && (
                 <button type="button" onClick={() => setPaying(booking)} className="btn !bg-on-paint !text-paint !px-6 !py-3.5">
                   <CreditCard className="h-4 w-4" /> Pay {rupees(booking.totalAmount)} now
@@ -132,15 +162,25 @@ export default function BookingSuccessPage() {
           <div className="enter lg:col-span-6" style={{ '--d': '150ms' }}>
             <div className="overflow-hidden rounded-chip bg-raised text-ink shadow-lift">
               <div className="relative aspect-[16/7] bg-ink/10">
-                <img src={sizedImage(car.images?.main, 960)} alt={car.name || ''} onError={(e) => handleImageError(e, 960)} className={`h-full w-full object-cover ${cancelled ? 'unlit' : ''}`} />
+                <m.img
+                  src={sizedImage(car.images?.main, 960)}
+                  alt={car.name || ''}
+                  onError={(e) => handleImageError(e, 960)}
+                  className="h-full w-full object-cover"
+                  {...(cancelled ? switchOff : {})}
+                />
                 <span className="lacquer absolute left-4 top-4 rounded-lg px-2.5 py-1.5 code-label text-[11px]">Paint {paint.no} · {car.type}</span>
+                {/* Keyed on its word, so paying from this page stamps "Paid" over "Reserved" */}
                 <span
+                  key={stamp}
                   className="stamp-in absolute bottom-4 right-4 rotate-[-8deg] rounded-lg border-[3px] border-white bg-[#0C0C0D]/80 px-4 py-2 font-wide font-black uppercase tracking-tight text-xl text-white shadow-lift"
                   aria-hidden="true"
                 >
                   {stamp}
                 </span>
               </div>
+              {/* The ticket's lines arrive with the sheet and are readable at once: the invoice number
+                  and dates are what the user came for, so nothing here waits or blurs */}
               <dl className="divide-y divide-line text-sm">
                 <div className="flex items-center justify-between gap-4 px-6 py-4">
                   <dt className="text-muted">Invoice</dt><dd className="font-semibold">{booking.invoiceNumber}</dd>
@@ -160,7 +200,16 @@ export default function BookingSuccessPage() {
                 </div>
                 <div className="flex items-end justify-between gap-4 bg-ink/[0.03] px-6 py-5">
                   <dt className="text-muted">{totalLabel}</dt>
-                  <dd className={`font-wide font-black text-3xl ${cancelled ? 'text-muted line-through decoration-2' : ''}`}>{rupees(booking.totalAmount)}</dd>
+                  <dd className={`relative font-wide font-black text-3xl ${cancelled ? 'text-muted' : ''}`}>
+                    {rupees(booking.totalAmount)}
+                    {/* Cancelled: the total is struck through by a line drawn left to right as the stamp lands */}
+                    {cancelled && (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-x-0 top-[calc(50%-1px)] h-[2px] origin-left bg-current animate-[draw_420ms_var(--ease-out)_900ms_backwards]"
+                      />
+                    )}
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -169,13 +218,14 @@ export default function BookingSuccessPage() {
       </section>
 
       <section className="page-container flex flex-wrap items-center justify-between gap-6 py-12">
+        {/* The points are this booking's real figure: they count up once as they come into view */}
         <p className="text-muted">
           {cancelled ? (
             'Cancelled bookings do not earn loyalty points.'
           ) : booking.status === 'Completed' ? (
-            <>You earned <strong className="text-ink">{points.toLocaleString('en-IN')} loyalty points</strong> with this trip.</>
+            <>You earned <strong className="text-ink"><CountUp value={points} /> loyalty points</strong> with this trip.</>
           ) : (
-            <>You will earn <strong className="text-ink">{points.toLocaleString('en-IN')} loyalty points</strong> when this trip is completed.</>
+            <>You will earn <strong className="text-ink"><CountUp value={points} /> loyalty points</strong> when this trip is completed.</>
           )}
         </p>
         <Link to="/dashboard" className="btn-ink">Go to my garage <ArrowRight className="h-4 w-4" /></Link>

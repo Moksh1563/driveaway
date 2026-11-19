@@ -1,11 +1,24 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, m } from 'framer-motion';
 import { MapPin, Phone, Mail, Clock, Instagram, Twitter, Facebook, ArrowRight, Check, Loader2 } from 'lucide-react';
 import api from '../../api/axios';
 import Logo from './Logo';
+import Reveal from '../ui/Reveal';
 import { PAINTS, PAINT_ORDER } from '../../theme/paints';
+import { EASE } from '../../theme/motion';
+import { ERROR_IN } from '../booking/FieldError';
 
 import { HUBS } from '../../theme/hubs';
+
+// The paint strip draws across from the left the first time the footer arrives (index.css `draw`).
+// The long stagger only keeps Reveal's quick "settled" timing from cutting the 800ms draw short.
+const stripDraw = { '--reveal-anim': 'draw', '--reveal-dur': '800ms' };
+
+// Subscribe form ↔ thank-you line: the form steps out, the confirmation comes into focus. The
+// confirmation and the error are CSS entrances, so neither waits on the lazily loaded Framer chunk.
+const formOut = { opacity: 0, y: -6, transition: { duration: 0.15, ease: EASE.in } };
+const CONFIRM_IN = 'animate-[focus-in_360ms_var(--ease-out)_backwards] [--rise:8px]';
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -30,23 +43,27 @@ export default function Footer() {
   return (
     <footer className="bg-surface border-t border-line text-ink">
       {/* Paint strip: the whole paint book, edge to edge */}
-      <div className="flex h-2" aria-hidden="true">
-        {PAINT_ORDER.map((t) => <span key={t} className="flex-1" style={{ background: PAINTS[t].hex }} />)}
-      </div>
+      <Reveal aria-hidden="true" stagger={100} style={stripDraw}>
+        <div className="flex h-2 origin-left">
+          {PAINT_ORDER.map((t) => <span key={t} className="flex-1" style={{ background: PAINTS[t].hex }} />)}
+        </div>
+      </Reveal>
 
-      <div className="page-container pt-16 pb-10">
+      {/* The footer's three bands rise in once, in order, as it scrolls into view */}
+      <Reveal className="page-container pt-16 pb-10" stagger={80}>
         <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr]">
           <div>
             <h2 className="display text-4xl sm:text-5xl">Offers, first.</h2>
             <p className="mt-4 max-w-md text-muted">
               Get promo codes and flash offers on hypercars and supercars by email. One click to unsubscribe.
             </p>
+            <AnimatePresence mode="wait" initial={false}>
             {msg?.ok ? (
-              <p className="mt-6 inline-flex items-center gap-2 font-semibold" role="status">
+              <p key="subscribed" className={`mt-6 inline-flex items-center gap-2 font-semibold ${CONFIRM_IN}`} role="status">
                 <Check className="w-4 h-4 text-ok" /> {msg.text}
               </p>
             ) : (
-              <form onSubmit={handleSubscribe} className="mt-6 flex max-w-md gap-2">
+              <m.form key="subscribe" exit={formOut} onSubmit={handleSubscribe} className="mt-6 flex max-w-md gap-2">
                 <label htmlFor="footer-email" className="sr-only">Email address</label>
                 <input
                   id="footer-email"
@@ -62,9 +79,14 @@ export default function Footer() {
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                   Subscribe
                 </button>
-              </form>
+              </m.form>
             )}
-            {msg && !msg.ok && <p className="mt-2 text-sm text-danger" role="alert">{msg.text}</p>}
+            </AnimatePresence>
+            {msg && !msg.ok && (
+              <p key={msg.text} className={`mt-2 text-sm text-danger ${ERROR_IN}`} role="alert">
+                {msg.text}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-8 text-sm">
@@ -115,13 +137,14 @@ export default function Footer() {
               { icon: Twitter, label: 'Twitter' },
               { icon: Facebook, label: 'Facebook' },
             ].map(({ icon: Icon, label }) => (
-              <a key={label} href="#" aria-label={label} className="w-10 h-10 grid place-items-center rounded-full border border-line hover:border-ink transition-colors">
-                <Icon className="w-4 h-4" />
+              <a key={label} href="#" aria-label={label} className="group w-10 h-10 grid place-items-center rounded-full border border-line hover:border-ink transition-colors">
+                {/* The circle stays put; the glyph lifts a touch under the pointer */}
+                <Icon className="w-4 h-4 transition-transform duration-200 ease-out group-hover:-translate-y-0.5" />
               </a>
             ))}
           </div>
         </div>
-      </div>
+      </Reveal>
     </footer>
   );
 }

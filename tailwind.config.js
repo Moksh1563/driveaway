@@ -60,7 +60,7 @@ export default {
         },
       },
       animation: {
-        wipe: 'wipe 450ms cubic-bezier(0.77, 0, 0.175, 1) both',
+        wipe: 'wipe 620ms cubic-bezier(0.65, 0, 0.35, 1) both',
       },
     },
   },

@@ -40,7 +40,9 @@
     color-scheme: dark;
   }
 
-  html { -webkit-tap-highlight-color: transparent; }
+  /* position: relative lets Framer's useScroll (hooks/useScrollDrift.js) measure scroll offsets
+     against the page without its "container has a static position" warning */
+  html { -webkit-tap-highlight-color: transparent; position: relative; }
   body {
     @apply font-sans antialiased bg-ground text-ink;
     font-feature-settings: 'ss01', 'tnum';
@@ -64,6 +66,15 @@
      on the dark theme's light ink. Draw the tick in the dark ground colour there instead. */
   :root.dark [type='checkbox']:checked {
     background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='%230C0C0D' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+  }
+  /* Radios on the dark theme: the forms plugin paints an unchecked radio white, and a checked one in
+     the light ink with a white dot, so both look the same. Show an empty ring, and a filled ring with
+     a dark centre once chosen. */
+  :root.dark [type='radio'] { background-color: transparent; border-color: rgb(var(--muted)); }
+  :root.dark [type='radio']:checked {
+    background-color: rgb(var(--ink));
+    border-color: transparent;
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='%230C0C0D' xmlns='http://www.w3.org/2000/svg'%3e%3ccircle cx='8' cy='8' r='3'/%3e%3c/svg%3e");
   }
 
   ::selection { background: rgb(var(--paint)); color: rgb(var(--on-paint)); }
@@ -143,7 +154,7 @@
   /* Buttons */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold text-sm px-5 py-3
-      transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.96]
+      transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.98]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
   }
   .btn-ink { @apply btn bg-ink text-ground hover:bg-ink/85; }
@@ -181,12 +192,11 @@
 @keyframes slide-in { from { opacity: 0; transform: translateX(-18px); } }
 @keyframes line-up { from { transform: translateY(108%); } }
 @keyframes draw { from { transform: scaleX(0); } }
+@keyframes draw-y { from { transform: scaleY(0); } }
 @keyframes pop { 0% { transform: scale(1.07); } }
 @keyframes dot-in { from { opacity: 0; transform: scale(0.5); } }
-@keyframes stamp {
-  0% { opacity: 0; transform: scale(1.8) rotate(-16deg); }
-  60% { opacity: 1; transform: scale(0.94) rotate(-8deg); }
-}
+/* A rubber stamp pressed down: it settles straight onto its resting tilt, no undershoot or rebound */
+@keyframes stamp { from { opacity: 0; transform: scale(1.25) rotate(-12deg); } }
 @keyframes sheen { to { transform: translateX(420%) skewX(-18deg); } }
 
 /* One-off entrances: add the class, optionally set --d (delay) */
@@ -262,6 +272,107 @@
 .pin-dot { animation: dot-in 240ms var(--ease-out) backwards; animation-delay: calc(560ms + var(--i, 0) * 90ms); }
 
 .stamp-in { animation: stamp 500ms var(--ease-out) 450ms backwards; }
+
+/* Chart bars growing up from their baseline (admin revenue chart). Without the class they are
+ simply drawn, so the chart never depends on the animation running. */
+.grow-up { transform-origin: bottom; animation: draw-y 500ms var(--ease-out) backwards; animation-delay: var(--d, 0ms); }
+
+/* Focus-in: content fades up out of a soft blur (headings, hero photo, confirmations) */
+@keyframes focus-in { from { opacity: 0; filter: blur(10px); transform: translateY(var(--rise, 18px)); } }
+.focus-in { animation: focus-in 700ms var(--ease-out) backwards; animation-delay: var(--d, 0ms); }
+[data-reveal='focus'] { --reveal-anim: focus-in; --reveal-dur: 700ms; }
+
+/* A new page settling in after navigation (the router keys this on the path) */
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
+.page-in { animation: page-in 320ms var(--ease-out) backwards; }
+/* During a page morph the view transition already fades the page; don't fade it twice */
+:root:active-view-transition .page-in { animation: none; }
+
+/* ── Page-to-page morph (View Transitions API, see hooks/useViewTransitionNavigate.js) ──
+ The page cross-fades quickly; a car photo named on both pages glides from the card to the car page. */
+::view-transition-old(root) { animation: 160ms var(--ease-in) both vt-fade-out; }
+::view-transition-new(root) { animation: 280ms var(--ease-out) both vt-fade-in; }
+::view-transition-group(*) { animation-duration: 520ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(*), ::view-transition-new(*) { height: 100%; object-fit: cover; overflow: clip; }
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ── Paint picker (home hero): one chip per category standing on the hero's bottom edge.
+ The chosen chip widens to show its name, count and price; the rest slim to a strip with the paint
+ number. Width eases on flex-grow so the text inside never stretches. */
+@keyframes chip-up { from { transform: translateY(105%); } }
+.paint-picker { display: flex; align-items: flex-end; gap: 6px; }
+.paint-chip {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 52px;
+  height: 9.5rem;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition: flex-grow 600ms var(--ease-out), min-width 600ms var(--ease-out);
+  animation: chip-up 640ms var(--ease-out) backwards;
+  animation-delay: var(--d, 0ms);
+}
+.paint-chip[data-active='true'] { flex-grow: 4.2; min-width: 232px; }
+.paint-chip:focus-visible { outline: none; }
+.paint-chip-surface {
+  position: absolute;
+  inset: 22px 0 0 0;
+  display: block;
+  overflow: hidden;
+  color: rgb(var(--on-paint));
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 18px 40px -18px rgb(0 0 0 / 0.55);
+  transform: translateY(14px);
+  transition: transform 450ms var(--ease-out), box-shadow 300ms var(--ease-out);
+}
+.paint-chip[data-active='true'] .paint-chip-surface {
+  transform: translateY(-4px);
+  box-shadow: inset 0 0 0 2px rgb(var(--on-paint) / 0.9), 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 26px 50px -18px rgb(0 0 0 / 0.65);
+}
+@media (hover: hover) and (pointer: fine) {
+  .paint-chip[data-active='false']:hover .paint-chip-surface { transform: translateY(4px); }
+}
+.paint-chip:focus-visible .paint-chip-surface { outline: 2px solid rgb(var(--on-paint)); outline-offset: 3px; }
+.paint-chip:active .paint-chip-surface { transition-duration: 120ms; }
+.paint-chip-slim,
+.paint-chip-open {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 12px 34px;
+  transition: opacity 180ms var(--ease-in), transform 180ms var(--ease-in);
+}
+.paint-chip-open { padding-left: 20px; padding-right: 18px; white-space: nowrap; opacity: 0; transform: translateY(10px); }
+.paint-chip[data-active='true'] .paint-chip-open {
+  opacity: 1;
+  transform: none;
+  transition: opacity 360ms var(--ease-out) 200ms, transform 520ms var(--ease-out) 200ms;
+}
+.paint-chip[data-active='true'] .paint-chip-slim { opacity: 0; transform: translateY(-8px); }
+.paint-chip-dot {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgb(var(--on-paint));
+  transform: scale(0);
+  transition: transform 200ms var(--ease-in);
+}
+.paint-chip[data-active='true'] .paint-chip-dot { transform: scale(1); transition: transform 360ms var(--ease-out) 320ms; }
+@media (max-width: 639px) {
+  .paint-chip { height: 8.5rem; min-width: 46px; }
+  .paint-chip[data-active='true'] { min-width: 208px; }
+}
 
 /* Small icon buttons: a clickable zone bigger than the visual (40px with a mouse, 44px on touch) */
 .hit-area { position: relative; }

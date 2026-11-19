@@ -17,18 +17,28 @@ function Loading({ label = 'Loading' }) {
   return <span className="sr-only" role="status">{label}…</span>;
 }
 
-export function CarCardSkeleton() {
+// One shimmer cycle (the .skeleton animation in index.css) and the lag between neighbouring cards
+const SHIMMER_MS = 1600;
+const SHIMMER_LAG_MS = 120;
+
+/**
+ * `index`: the card's place in a grid. Each card's gloss runs a little behind the one before it
+ * (negative delays, so every card is already moving), so one sweep travels across the grid
+ * instead of every card pulsing at once. Static under reduced motion, like every bone.
+ */
+export function CarCardSkeleton({ index = 0 }) {
+  const phase = { animationDelay: `${index * SHIMMER_LAG_MS - SHIMMER_MS}ms` };
   return (
     <div className="overflow-hidden rounded-chip border border-line bg-raised" aria-hidden="true">
-      <Bone className="aspect-[16/10] !rounded-none" />
+      <Bone className="aspect-[16/10] !rounded-none" style={phase} />
       <div className="space-y-3 p-5">
-        <Bone className="h-5 w-3/4" />
+        <Bone className="h-5 w-3/4" style={phase} />
         <div className="flex items-center justify-between gap-4">
-          <Bone className="h-3 w-1/4" />
-          <Bone className="h-5 w-20" />
+          <Bone className="h-3 w-1/4" style={phase} />
+          <Bone className="h-5 w-20" style={phase} />
         </div>
-        <Bone className="h-3 w-2/3" />
-        <Bone className="mt-2 h-11 w-full" />
+        <Bone className="h-3 w-2/3" style={phase} />
+        <Bone className="mt-2 h-11 w-full" style={phase} />
       </div>
     </div>
   );
@@ -37,7 +47,7 @@ export function CarCardSkeleton() {
 export function CarGridSkeleton({ count = 6, className = '' }) {
   return (
     <div className={`grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3 ${className}`}>
-      {[...Array(count)].map((_, i) => <CarCardSkeleton key={i} />)}
+      {[...Array(count)].map((_, i) => <CarCardSkeleton key={i} index={i} />)}
     </div>
   );
 }
@@ -349,9 +359,17 @@ export function AuthSkeleton() {
   );
 }
 
-/** Picks the skeleton that matches the route being loaded (used as the Suspense fallback). */
+/**
+ * Picks the skeleton that matches the route being loaded (used as the Suspense fallback). It is at
+ * least a screen tall, so the footer stays below the fold until the page arrives instead of playing
+ * its one-time reveal behind a short skeleton and then jumping down.
+ */
 export function RouteSkeleton() {
   const { pathname } = useLocation();
+  return <div className="min-h-screen">{skeletonFor(pathname)}</div>;
+}
+
+function skeletonFor(pathname) {
   if (pathname === '/') return <HomeSkeleton />;
   if (pathname.startsWith('/fleet')) return <FleetSkeleton />;
   if (pathname.startsWith('/cars/')) return <CarDetailSkeleton />;

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import AuthShell, { PasswordChecklist } from '../components/layout/AuthShell';
+import PasswordEye from '../components/account/PasswordEye';
+import { ERROR_IN, useShake } from '../components/account/formFeedback';
 import { isEmail, isIndianMobile, passwordOk } from '../hooks/useFieldErrors';
 
 export default function RegisterPage() {
@@ -18,18 +20,21 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
+  const [formRef, shake] = useShake();
 
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
   const passOk = passwordOk(form.password);
+  // A refused submit shows its reason and gives the form a small shake
+  const fail = (message) => { setError(message); shake(); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!isEmail(form.email)) return setError('Enter a valid email address, like you@example.com.');
-    if (form.phone.trim() && !isIndianMobile(form.phone)) return setError('Enter a 10-digit Indian mobile number, or leave the phone empty.');
-    if (!passOk) return setError('Your password needs 8 to 128 characters, with a letter and a number.');
-    if (form.password !== form.confirmPassword) return setError('The two passwords do not match.');
-    if (!agreed) return setError('Please accept the rental terms to continue.');
+    if (!isEmail(form.email)) return fail('Enter a valid email address, like you@example.com.');
+    if (form.phone.trim() && !isIndianMobile(form.phone)) return fail('Enter a 10-digit Indian mobile number, or leave the phone empty.');
+    if (!passOk) return fail('Your password needs 8 to 128 characters, with a letter and a number.');
+    if (form.password !== form.confirmPassword) return fail('The two passwords do not match.');
+    if (!agreed) return fail('Please accept the rental terms to continue.');
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', {
@@ -43,7 +48,7 @@ export default function RegisterPage() {
       toast.success(`Welcome to Driveaway, ${data.user.name}`);
       navigate(redirectTo || '/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not create your account. Try again.');
+      fail(err.response?.data?.message || 'Could not create your account. Try again.');
     } finally {
       setLoading(false);
     }
@@ -58,7 +63,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell paint="Hypercar" title="Get the keys." lead="Create an account once, then book any car in the fleet in about two minutes.">
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
           {field('name', 'Full name', 'text', 'name', 'Your name')}
           {field('username', 'Username', 'text', 'username', 'letters, numbers, _ or .')}
@@ -72,8 +77,8 @@ export default function RegisterPage() {
           <span className="field-label">Password</span>
           <span className="relative block">
             <input type={showPw ? 'text' : 'password'} required autoComplete="new-password" value={form.password} onChange={set('password')} className="field !pr-12" />
-            <button type="button" onClick={() => setShowPw((s) => !s)} aria-label={showPw ? 'Hide password' : 'Show password'} className="absolute right-1.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full text-muted hover:text-ink">
-              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            <button type="button" onClick={() => setShowPw((s) => !s)} aria-label={showPw ? 'Hide password' : 'Show password'} className="absolute right-1.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full text-muted transition-[color,transform] duration-150 ease-out hover:text-ink active:scale-[0.96]">
+              <PasswordEye shown={showPw} />
             </button>
           </span>
         </label>
@@ -91,7 +96,7 @@ export default function RegisterPage() {
           </span>
         </label>
 
-        {error && <p role="alert" className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>}
+        {error && <p key={error} role="alert" className={`rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger ${ERROR_IN}`}>{error}</p>}
 
         <Button type="submit" loading={loading} className="w-full !py-4 text-base">
           Create account <ArrowRight className="h-4 w-4" />

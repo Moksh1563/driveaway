@@ -35,9 +35,10 @@ export default function Badge({ status, showDot = true, onImage = false, classNa
     : `bg-ink/[0.06] ${TEXT[status] || 'text-muted'}`;
   const dot = onImage && status === 'Confirmed' ? 'bg-white' : DOT[status] || 'bg-muted';
 
+  // A status that changes in place (admin tables) eases to its new colour instead of snapping
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 code-label text-[11px] ${tone} ${className}`}>
-      {showDot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 code-label text-[11px] transition-colors duration-200 ease-out ${tone} ${className}`}>
+      {showDot && <span className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ease-out ${dot}`} />}
       {status}
     </span>
   );

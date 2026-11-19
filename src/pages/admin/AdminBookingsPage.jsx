@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { AnimatePresence, m } from 'framer-motion';
 import { Search, Download, MessageCircle, Eye, Trash2, Banknote } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
@@ -11,8 +12,25 @@ import { generatePDF, sendWhatsAppInvoice } from '../../components/invoice/Invoi
 import { TableSkeleton } from '../../components/ui/Skeletons';
 import { paymentLabel, paymentRef } from '../../utils/payment';
 import useDebounced from '../../hooks/useDebounced';
+import { EASE, listItem, SPRING } from '../../theme/motion';
 
 const STATUSES = ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'];
+
+// Table rows: each server page replaces the set, so rows that stay glide to their new place and new
+// rows fade in with a short, capped cascade. There is no exit animation, so a page change never
+// shows the old and new rows together. Reduced motion: rows simply swap.
+const ROW_TRANSITION = { layout: { duration: 0.3, ease: EASE.out } };
+const rowEnter = (i) => ({
+  initial: listItem.initial,
+  animate: { ...listItem.animate, transition: { ...listItem.animate.transition, delay: Math.min(i, 8) * 0.015 } },
+});
+const pagerButton = 'px-3 py-1.5 rounded-lg border border-line text-muted text-xs font-semibold disabled:opacity-30 hover:border-ink hover:text-ink transition-[color,border-color,transform] duration-150 ease-out active:scale-[0.98] disabled:active:scale-100';
+// Small row buttons: border and colour answer hover, the button gives a little under the press
+// (labelled pills as much as any button, the square icon buttons a touch more)
+const press = 'transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]';
+const iconPress = 'transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.96]';
+// Skeleton → table: the first loaded page fades in where the skeleton was; later pages use the rows' own motion
+const viewIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.2, ease: EASE.out } } };
 
 // Mirrors the server's transition table; used only when an older API omits allowedNextStatuses
 const NEXT_STATUSES = { Pending: ['Confirmed', 'Cancelled'], Confirmed: ['Completed', 'Cancelled'], Completed: [], Cancelled: [] };
@@ -248,13 +266,17 @@ export default function AdminBookingsPage() {
               type="button"
               aria-pressed={filters.status === s}
               onClick={() => setFilters(prev => ({ ...prev, status: s, page: 1 }))}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-[color,background-color,border-color,opacity,box-shadow,transform] ${
+              className={`relative px-3.5 py-2 rounded-xl text-xs font-bold border bg-raised transition-[color,background-color,border-color,opacity,box-shadow,transform] duration-200 ease-out active:scale-[0.98] ${
  filters.status === s
- ? 'bg-ink border-ink text-ground shadow-sm'
- : 'bg-raised border-line text-muted hover:border-ink'
+ ? 'border-ink text-ground shadow-sm'
+ : 'border-line text-muted hover:border-ink'
  }`}
             >
-              {s}
+              {/* The ink fill slides to the chosen status, like a segmented control */}
+              {filters.status === s && (
+                <m.span layoutId="admin-booking-status" transition={SPRING} className="absolute inset-0 rounded-[11px] bg-ink" aria-hidden="true" />
+              )}
+              <span className="relative">{s}</span>
             </button>
           ))}
         </div>
@@ -265,7 +287,7 @@ export default function AdminBookingsPage() {
       {!loaded && loading ? <TableSkeleton cols={6} /> : !loaded && error ? (
         <LoadError message={error} onRetry={reload} />
       ) : (
-        <div className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
+        <m.div {...viewIn} className="bg-surface border border-line rounded-chip overflow-hidden shadow-sm">
           <div className={`overflow-x-auto transition-opacity duration-150 ${loading ? 'opacity-60' : ''}`} aria-busy={loading || undefined}>
             <table className="w-full text-sm">
               <thead>
@@ -276,10 +298,11 @@ export default function AdminBookingsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {bookings.map(b => {
+                <AnimatePresence initial={false}>
+                {bookings.map((b, i) => {
                   const next = nextStatuses(b);
                   return (
-                    <tr key={b._id} className="hover:bg-ink/5 transition-colors">
+                    <m.tr key={b._id} layout="position" {...rowEnter(i)} transition={ROW_TRANSITION} className="hover:bg-ink/5 transition-colors">
                       <td className="p-4 font-mono text-ink font-bold text-xs">{b.invoiceNumber}</td>
                       <td className="p-4">
                         <p className="text-ink font-bold">{b.user?.name || b.customerName}</p>
@@ -306,7 +329,7 @@ export default function AdminBookingsPage() {
                             type="button"
                             onClick={() => openAction({ kind: 'cash', booking: b })}
                             aria-label={`Mark cash collected for ${b.invoiceNumber}`}
-                            className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-ink hover:border-ink transition-colors whitespace-nowrap"
+                            className={`mt-1.5 inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-ink hover:border-ink whitespace-nowrap ${press}`}
                           >
                             <Banknote className="w-3.5 h-3.5" aria-hidden="true" /> Mark cash collected
                           </button>
@@ -322,7 +345,7 @@ export default function AdminBookingsPage() {
                                 type="button"
                                 onClick={() => openAction({ kind: 'status', booking: b, status: s })}
                                 aria-label={`${ACTION_TITLE[s] || `Mark as ${s}`}: ${b.invoiceNumber}`}
-                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${press} ${
                                   s === 'Cancelled'
                                     ? 'border-line text-danger hover:border-danger hover:bg-danger/10'
                                     : 'border-line text-ink hover:border-ink'
@@ -339,7 +362,7 @@ export default function AdminBookingsPage() {
                           <button
                             type="button"
                             onClick={() => setViewModal(b)}
-                            className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                            className={`hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink ${iconPress}`}
                             title="View details"
                             aria-label={`View booking ${b.invoiceNumber}`}
                           >
@@ -348,7 +371,7 @@ export default function AdminBookingsPage() {
                           <button
                             onClick={() => generatePDF(b, b.car)}
                             type="button"
-                            className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                            className={`hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink ${iconPress}`}
                             title="Download invoice PDF"
                             aria-label={`Download invoice ${b.invoiceNumber}`}
                           >
@@ -357,7 +380,7 @@ export default function AdminBookingsPage() {
                           <button
                             onClick={() => sendWhatsAppInvoice(b, b.car)}
                             type="button"
-                            className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink transition-colors"
+                            className={`hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-ink hover:border-ink ${iconPress}`}
                             title="Send invoice on WhatsApp"
                             aria-label={`Send invoice ${b.invoiceNumber} on WhatsApp`}
                           >
@@ -366,7 +389,7 @@ export default function AdminBookingsPage() {
                           <button
                             type="button"
                             onClick={() => openAction({ kind: 'delete', booking: b })}
-                            className="hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 transition-colors"
+                            className={`hit-area w-8 h-8 flex items-center justify-center rounded-lg border border-line text-danger hover:border-danger hover:bg-danger/10 ${iconPress}`}
                             title="Delete booking"
                             aria-label={`Delete booking ${b.invoiceNumber}`}
                           >
@@ -374,15 +397,16 @@ export default function AdminBookingsPage() {
                           </button>
                         </div>
                       </td>
-                    </tr>
+                    </m.tr>
                   );
                 })}
+                </AnimatePresence>
                 {bookings.length === 0 && (
-                  <tr>
+                  <m.tr initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2, ease: EASE.out } }}>
                     <td colSpan={7} className="p-8 text-center text-muted">
                       {filters.q || filters.status !== 'All' ? 'No bookings match these filters.' : 'No bookings yet.'}
                     </td>
-                  </tr>
+                  </m.tr>
                 )}
               </tbody>
             </table>
@@ -396,7 +420,7 @@ export default function AdminBookingsPage() {
                   type="button"
                   disabled={filters.page <= 1}
                   onClick={() => setFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-                  className="px-3 py-1.5 rounded-lg border border-line text-muted text-xs font-semibold disabled:opacity-30 hover:border-ink hover:text-ink transition-colors"
+                  className={pagerButton}
                 >
                   Previous
                 </button>
@@ -404,14 +428,14 @@ export default function AdminBookingsPage() {
                   type="button"
                   disabled={filters.page >= totalPages}
                   onClick={() => setFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-                  className="px-3 py-1.5 rounded-lg border border-line text-muted text-xs font-semibold disabled:opacity-30 hover:border-ink hover:text-ink transition-colors"
+                  className={pagerButton}
                 >
                   Next
                 </button>
               </div>
             </div>
           )}
-        </div>
+        </m.div>
       )}
 
       {/* Confirm a status change, cash payment or deletion */}
