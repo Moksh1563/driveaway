@@ -24,6 +24,46 @@ const addDays = (ymd, days) => {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().split('T')[0];
 };
 
+// The hero photo: the same widths and sizes for the <img> and for preloading it, so the browser
+// picks the same file both times
+const HERO_WIDTHS = [800, 1200, 1600];
+const HERO_SIZES = '(min-width: 1024px) 55vw, 100vw';
+const heroSrc = (url) => sizedImage(url, 1400, 75);
+
+// Downloads and decodes a hero photo once; resolves when it is ready to paint (or failed, in which
+// case the <img> shows its fallback)
+const heroPhotos = new Map();
+function preloadHero(url, priority = 'high') {
+  if (!heroPhotos.has(url)) {
+    const img = new Image();
+    img.fetchPriority = priority;
+    img.decoding = 'async';
+    img.sizes = HERO_SIZES;
+    const set = imageSrcSet(url, HERO_WIDTHS);
+    if (set) img.srcset = set;
+    img.src = heroSrc(url);
+    heroPhotos.set(url, img.decode().catch(() => {}));
+  }
+  return heroPhotos.get(url);
+}
+
+// The repaint lands the next car with the paint: a beat late, out of a soft blur, while the last
+// one dissolves. Any other swap (the first car arriving with the data) is a quick crossfade: the new
+// photo fades in over the old one, which leaves only once it is covered.
+const HERO_PHOTO = {
+  hidden: (repaint) => (repaint ? { opacity: 0, scale: 1.06, filter: 'blur(12px)' } : { opacity: 0 }),
+  shown: (repaint) => ({
+    opacity: 1,
+    scale: 1,
+    filter: 'blur(0px)',
+    transition: repaint ? { duration: 0.7, delay: 0.25, ease: EASE.out } : { duration: 0.35, ease: EASE.out },
+  }),
+  gone: (repaint) => ({
+    opacity: 0,
+    transition: repaint ? { duration: 0.35, delay: 0.25, ease: EASE.in } : { duration: 0.15, delay: 0.35 },
+  }),
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [cars, setCars] = useState([]);
@@ -117,8 +157,31 @@ export default function HomePage() {
     navigate(`/fleet?${params.toString()}`);
   };
 
-  const heroImg = group?.hero?.images?.main;
-  const heroId = group?.hero?._id;
+  const hero = group?.hero;
+  const heroId = hero?._id;
+
+  // The photo on show changes only once the next one is downloaded (or has failed, and the <img>
+  // shows its fallback), so the frame never goes blank or fades in on a half-loaded image; until
+  // then the last photo, or the header photo, holds the frame
+  const [heroPhoto, setHeroPhoto] = useState(null); // { url, alt }
+  useEffect(() => {
+    const url = hero?.images?.main;
+    if (!url) {
+      // A car without a photo: back to the header photo, never the last car under this car's name
+      if (hero) setHeroPhoto(null);
+      return undefined;
+    }
+    let live = true;
+    preloadHero(url).then(() => { if (live) setHeroPhoto({ url, alt: carTitle(hero) }); });
+    return () => { live = false; };
+  }, [hero]);
+
+  // Resting the mouse on a chip starts that category's photo downloading, so the repaint usually
+  // has it ready (PaintPicker only calls this after a short dwell, so a sweep along the row is free)
+  const previewPaint = (type) => {
+    const url = book.find((g) => g.type === type)?.hero?.images?.main;
+    if (url) preloadHero(url);
+  };
 
   // Real reviews of the car currently on show (no invented testimonials)
   useEffect(() => {
@@ -202,7 +265,7 @@ export default function HomePage() {
                 <label className="col-span-2 sm:col-span-1">
                   <span className="field-label">Category</span>
                   <select value={selected} onChange={(e) => choose(e.target.value)} className="field">
-                    {(book.length ? book.map((g) => g.type) : PAINT_ORDER.slice(0, 5)).map((t) => (
+                    {(book.length ? book.map((g) => g.type) : PAINT_ORDER).map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
@@ -246,17 +309,20 @@ export default function HomePage() {
             <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] rounded-bl-[96px] bg-black/20 shadow-lift lg:aspect-auto lg:h-full lg:min-h-[340px]">
               {/* Taller than the frame so the photo can ease down inside it as the hero scrolls away */}
               <m.div className="absolute inset-x-0 -top-[12%] bottom-0" style={{ y: photoDrift.y }}>
-                <AnimatePresence initial={false}>
-                  {/* The next car comes into focus as the new paint lands; the last one dissolves */}
+                {/* Until the cars load, the header photo holds the frame. `custom` tells both the
+                    arriving and the leaving photo whether this swap is a repaint (see HERO_PHOTO). */}
+                <AnimatePresence initial={false} custom={Boolean(wipe)}>
                   <m.img
-                    key={heroImg || 'hero'}
-                    initial={{ opacity: 0, scale: 1.06, filter: 'blur(12px)' }}
-                    animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transition: { duration: 0.7, delay: 0.25, ease: EASE.out } }}
-                    exit={{ opacity: 0, transition: { duration: 0.35, delay: 0.25, ease: EASE.in } }}
-                    src={heroImg ? sizedImage(heroImg, 1400, 75) : '/images/luxury_hypercars_header.webp'}
-                    srcSet={heroImg ? imageSrcSet(heroImg, [800, 1200, 1600]) : undefined}
-                    sizes="(min-width: 1024px) 55vw, 100vw"
-                    alt={group?.hero ? carTitle(group.hero) : 'Driveaway hypercars'}
+                    key={heroPhoto?.url || 'hero'}
+                    custom={Boolean(wipe)}
+                    variants={HERO_PHOTO}
+                    initial="hidden"
+                    animate="shown"
+                    exit="gone"
+                    src={heroPhoto ? heroSrc(heroPhoto.url) : '/images/luxury_hypercars_header.webp'}
+                    srcSet={heroPhoto ? imageSrcSet(heroPhoto.url, HERO_WIDTHS) : undefined}
+                    sizes={HERO_SIZES}
+                    alt={heroPhoto?.alt || 'Driveaway hypercars'}
                     fetchpriority="high"
                     onError={(e) => handleImageError(e, 1200)}
                     className="absolute inset-0 h-full w-full object-cover"
@@ -288,10 +354,12 @@ export default function HomePage() {
         {/* Paint picker: the paint book. Choosing a chip widens it and repaints the page from it. */}
         <div className="absolute inset-x-0 bottom-0">
           <div className="page-container">
+            {/* While the cars load, all eight paints stand in, so no chip arrives late with the data */}
             <PaintPicker
-              groups={book.length ? book : PAINT_ORDER.slice(0, 5).map((type) => ({ type, list: [] }))}
+              groups={book.length ? book : PAINT_ORDER.map((type) => ({ type, list: [] }))}
               selected={selected}
               onChoose={choose}
+              onPreview={previewPaint}
             />
           </div>
         </div>
