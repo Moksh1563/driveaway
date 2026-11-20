@@ -8,12 +8,21 @@ import { PAINTS, paintStyle, rupees } from '../../theme/paints';
  *
  * A radio group: click or tap a chip, or use the arrow keys / Home / End (selection follows focus).
  * onChoose(type, event) receives the chip button as event.currentTarget, so the hero can start its
- * repaint from that chip.
+ * repaint from that chip. onPreview(type) fires when a mouse rests on an unchosen chip for a moment,
+ * a likely next pick (touch and keyboard choose at once, so there is nothing to get ahead of).
  */
-export default function PaintPicker({ groups, selected, onChoose }) {
+export default function PaintPicker({ groups, selected, onChoose, onPreview }) {
   const rowRef = useRef(null);
   const chipRefs = useRef({});
+  const dwell = useRef(0);
   const types = groups.map((g) => g.type);
+
+  const startPreview = (e, type) => {
+    clearTimeout(dwell.current);
+    if (e.pointerType === 'mouse' && onPreview) dwell.current = setTimeout(() => onPreview(type), 120);
+  };
+  const stopPreview = () => clearTimeout(dwell.current);
+  useEffect(() => stopPreview, []);
 
   const onKeyDown = (e, index) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
@@ -63,6 +72,8 @@ export default function PaintPicker({ groups, selected, onChoose }) {
             tabIndex={active ? 0 : -1}
             data-active={active}
             onClick={(e) => onChoose(g.type, e)}
+            onPointerEnter={active ? undefined : (e) => startPreview(e, g.type)}
+            onPointerLeave={stopPreview}
             onKeyDown={(e) => onKeyDown(e, i)}
             style={{ ...paintStyle(g.type), '--d': `${380 + i * 45}ms` }}
             className="paint-chip"
