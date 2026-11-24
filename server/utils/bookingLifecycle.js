@@ -41,22 +41,30 @@ const bookingView = (booking, today = todayStart()) => {
   return obj;
 };
 
-/** Refund points, give back the discount use, mark a paid booking refunded, tell waiting customers. */
+/**
+ * Refund points, give back the discount use, mark a paid booking refunded, tell waiting customers.
+ * The booking is already Cancelled when this runs, so each step runs on its own: one failing does
+ * not skip the others or tell the customer the cancellation failed. A failed step is logged with
+ * the booking id so it can be put right by hand.
+ */
 const applyCancellationEffects = async (booking) => {
-  const work = [];
+  const steps = [];
   if (booking.loyaltyPointsUsed > 0) {
-    work.push(User.updateOne({ _id: booking.user }, { $inc: { loyaltyPoints: booking.loyaltyPointsUsed } }));
+    steps.push(['points refund', User.updateOne({ _id: booking.user }, { $inc: { loyaltyPoints: booking.loyaltyPointsUsed } })]);
   }
   if (booking.discountCode && booking.discountClaimed) {
-    work.push(releaseDiscountUse(booking.discountCode));
+    steps.push(['discount release', releaseDiscountUse(booking.discountCode)]);
   }
   if (booking.paymentCompleted && !booking.refundedAt) {
     // Payments are simulated, so the refund is too: record when it was issued
     const refundedAt = new Date();
-    booking.refundedAt = refundedAt;
-    work.push(Booking.updateOne({ _id: booking._id, refundedAt: null }, { $set: { refundedAt } }));
+    steps.push(['refund record', Booking.updateOne({ _id: booking._id, refundedAt: null }, { $set: { refundedAt } })
+      .then((res) => { booking.refundedAt = refundedAt; return res; })]);
   }
-  await Promise.all(work);
+  const results = await Promise.allSettled(steps.map(([, work]) => work));
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') console.error(`Cancellation of booking ${booking._id}: ${steps[i][0]} failed`, r.reason);
+  });
   triggerCarAvailabilityAlerts(booking.car).catch((err) => console.error(err));
   return booking;
 };
@@ -119,7 +127,12 @@ const completeBooking = async (bookingId) => {
   );
   if (awarded) {
     booking = awarded;
-    if (points > 0) await User.updateOne({ _id: booking.user }, { $inc: { loyaltyPoints: points } });
+    if (points > 0) {
+      // The trip is already Completed, so a failed credit must not become an error for the admin
+      // (a retry would be refused); log it with the booking id so the points can be added by hand
+      await User.updateOne({ _id: booking.user }, { $inc: { loyaltyPoints: points } }).catch((err) =>
+        console.error(`Completion of booking ${booking._id}: crediting ${points} points failed`, err));
+    }
   }
 
   triggerCarAvailabilityAlerts(booking.car).catch((err) => console.error(err));

@@ -224,20 +224,26 @@ export default function BookingPage() {
     if (key === 'pickupDate') clear('returnDate');
   };
 
+  // Bumped on every apply and every edit of the code, so a slow answer for a code the user has
+  // since changed is ignored instead of applying the old code's discount
+  const promoRequest = useRef(0);
   const handleApplyDiscount = async () => {
     const code = form.discountCode.trim();
     if (!code) return;
+    const id = ++promoRequest.current;
     setDiscountLoading(true);
     clear('discountCode');
     try {
       const { data } = await api.post('/discount/validate', { code, subtotal: baseAmount || undefined });
+      if (id !== promoRequest.current) return;
       setDiscountInfo(data);
       toast.success(`${data.percentageOff}% off applied`);
     } catch (err) {
+      if (id !== promoRequest.current) return;
       setDiscountInfo(null);
       setErrors((p) => ({ ...p, discountCode: err.response?.data?.message || 'This code is not valid' }));
     } finally {
-      setDiscountLoading(false);
+      if (id === promoRequest.current) setDiscountLoading(false);
     }
   };
 
@@ -524,7 +530,7 @@ export default function BookingPage() {
                         type="text"
                         placeholder="DRIVEAWAY20"
                         value={form.discountCode}
-                        onChange={(e) => { setForm((p) => ({ ...p, discountCode: e.target.value.toUpperCase() })); setDiscountInfo(null); clear('discountCode'); }}
+                        onChange={(e) => { setForm((p) => ({ ...p, discountCode: e.target.value.toUpperCase() })); setDiscountInfo(null); clear('discountCode'); promoRequest.current += 1; setDiscountLoading(false); }}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyDiscount(); } }}
                         {...field('discountCode')}
                         className={`${FIELD_CLASS} uppercase`}
